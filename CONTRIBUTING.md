@@ -13,7 +13,8 @@ Run:
 ```bash
 go test ./...
 go vet ./...
-go build ./cmd/argusgate
+mkdir -p bin
+go build -o ./bin/argusgate ./cmd/argusgate
 ```
 
 ## Contribution Guidelines
@@ -29,6 +30,6 @@ go build ./cmd/argusgate
 
 - `go test ./...` passes.
 - `go vet ./...` passes.
-- `go build ./cmd/argusgate` passes.
+- `go build -o ./bin/argusgate ./cmd/argusgate` passes.
 - New examples use fake placeholders only.
 - Docs are updated when CLI, report, policy, or detector behavior changes.

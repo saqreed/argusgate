@@ -23,4 +23,6 @@ jobs:
         run: go vet ./...
 
       - name: Build CLI
-        run: go build ./cmd/argusgate
+        run: |
+          mkdir -p bin
+          go build -o ./bin/argusgate ./cmd/argusgate

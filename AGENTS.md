@@ -21,5 +21,5 @@ ArgusGate is an experimental open-source security scanner and policy gateway for
 
 - Run `go test ./...` before claiming scanner or policy behavior works.
 - Run `go vet ./...` before claiming release readiness.
-- Run `go build ./cmd/argusgate` before claiming the CLI builds.
+- Run `go build -o ./bin/argusgate ./cmd/argusgate` before claiming the CLI builds. Create `bin/` first if needed.
 - For docs examples, prefer commands that can run against files under `examples/`.

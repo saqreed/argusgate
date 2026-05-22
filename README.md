@@ -19,7 +19,8 @@ Requirements:
 - Go 1.24 or newer.
 
 ```bash
-go build -o argusgate ./cmd/argusgate
+mkdir -p bin
+go build -o ./bin/argusgate ./cmd/argusgate
 ```
 
 During development:
@@ -182,7 +183,7 @@ The repository CI runs:
 ```bash
 go test ./...
 go vet ./...
-go build ./cmd/argusgate
+mkdir -p bin && go build -o ./bin/argusgate ./cmd/argusgate
 ```
 
 ## Current Limitations
