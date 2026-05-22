@@ -1,0 +1,32 @@
+servers:
+  local-filesystem:
+    tools:
+      - name: read_file
+        title: Read Example File
+        description: Read a file under ./examples for local development checks.
+        inputSchema:
+          type: object
+          properties:
+            path:
+              type: string
+              description: Relative path under ./examples.
+          required:
+            - path
+      - name: list_directory
+        title: List Example Directory
+        description: List filenames under ./examples without modifying files.
+        inputSchema:
+          type: object
+          properties:
+            path:
+              type: string
+              description: Relative directory under ./examples.
+      - name: sql_readonly
+        title: Read Reporting Data
+        description: Run read-only SQL SELECT queries against reporting tables.
+        inputSchema:
+          type: object
+          properties:
+            sql:
+              type: string
+              description: SELECT query text for reporting data.

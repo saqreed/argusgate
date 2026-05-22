@@ -1,0 +1,33 @@
+version: "0.1"
+project:
+  name: "argusgate-example"
+defaults:
+  fail_on: "high"
+  allow_unknown_tools: true
+rules:
+  deny_tools:
+    - "shell_exec"
+    - "run_command"
+    - "file_write"
+  deny_keywords:
+    - "ignore previous instructions"
+    - "do not tell the user"
+    - "private key"
+    - "exfiltrate"
+  paths:
+    deny:
+      - "~/.ssh"
+      - "/etc"
+      - ".env"
+      - "kubeconfig"
+    allow:
+      - "./examples"
+      - "./testdata"
+servers:
+  local-filesystem:
+    allow_tools:
+      - "read_file"
+      - "list_directory"
+    deny_tools:
+      - "write_file"
+      - "delete_file"

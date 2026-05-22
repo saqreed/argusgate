@@ -1,0 +1,14 @@
+mcpServers:
+  local-filesystem:
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-filesystem"
+      - "./examples"
+    env:
+      ARGUSGATE_MODE: "example"
+  risky-api:
+    transport: http
+    url: "http://localhost:3333/mcp"
+    headers:
+      Authorization: "Bearer FAKE_TOKEN_DO_NOT_USE_1234567890"

@@ -1,0 +1,61 @@
+# Build artifacts
+/argusgate.exe
+/argusgate/argusgate
+/argusgate/argusgate.exe
+/bin/
+/build/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Test and coverage output
+coverage.out
+coverage/
+*.cover
+*.prof
+*.out
+
+# Generated scan reports
+/report.json
+/*-report.json
+/safe-report.json
+/malicious-report.json
+/config-report.json
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+.envrc
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+
+# Local logs and scratch files
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+
+# Agent-local planning notes, not project documentation
+/docs/superpowers
+/docs/superpowers/
