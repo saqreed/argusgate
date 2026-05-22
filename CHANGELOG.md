@@ -2,7 +2,7 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
-## 0.1.0 - Unreleased
+## 0.1.0 - 2026-05-22
 
 ### Added
 
