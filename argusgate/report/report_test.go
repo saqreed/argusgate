@@ -13,7 +13,7 @@ import (
 func TestBuildSortsFindingsAndRedactsEvidence(t *testing.T) {
 	r := Build(Input{
 		ScannedAt:  time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
-		Version:    "0.1.0",
+		Version:    "0.1.1",
 		SourceType: "fixtures",
 		SourcePath: "fixture.yaml",
 		Tools: []mcp.ToolDefinition{{
@@ -43,7 +43,7 @@ func TestBuildSortsFindingsAndRedactsEvidence(t *testing.T) {
 }
 
 func TestJSONBytesProducesReportJSON(t *testing.T) {
-	data, err := JSONBytes(Report{ArgusGateVersion: "0.1.0"})
+	data, err := JSONBytes(Report{ArgusGateVersion: "0.1.1"})
 	if err != nil {
 		t.Fatalf("JSONBytes failed: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestJSONBytesProducesReportJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if decoded.ArgusGateVersion != "0.1.0" {
+	if decoded.ArgusGateVersion != "0.1.1" {
 		t.Fatalf("unexpected version: %s", decoded.ArgusGateVersion)
 	}
 }

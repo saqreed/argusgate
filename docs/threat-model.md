@@ -25,7 +25,7 @@
 
 ## Detector Heuristics
 
-The v0.1.0 detectors are transparent static checks:
+The v0.1.x detectors are transparent static checks:
 
 - Tool poisoning: suspicious instruction phrases, hidden markdown/HTML comments, and long base64-like payloads in tool metadata.
 - Secret exposure: bearer tokens, key/value secret fields, JWT-like strings, connection strings, and private-key-shaped blocks.

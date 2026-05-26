@@ -10,7 +10,7 @@ ArgusGate is experimental. It performs heuristic static analysis. It is not a co
 
 MCP servers can expose tools that read files, run commands, query databases, automate browsers, call APIs, and operate infrastructure. A malicious or compromised server can also hide instructions in tool descriptions or leak secrets through config and metadata.
 
-ArgusGate v0.1.0 focuses on a small useful baseline: local offline scans, policy checks, readable terminal output, JSON reports, and CI-ready exit codes.
+ArgusGate v0.1.x focuses on a small useful baseline: local offline scans, policy checks, readable terminal output, JSON reports, and CI-ready exit codes.
 
 ## Install From Source
 
@@ -145,7 +145,7 @@ Example shape:
 ```json
 {
   "scanned_at": "2026-05-22T12:00:00Z",
-  "argusgate_version": "0.1.0",
+  "argusgate_version": "0.1.1",
   "source_type": "fixtures",
   "source_path": "examples/fixtures/malicious-tools.yaml",
   "servers": [],
@@ -192,7 +192,7 @@ mkdir -p bin && go build -o ./bin/argusgate ./cmd/argusgate
 - Findings can include false positives.
 - The scanner does not connect to live MCP servers.
 - The scanner does not execute tool commands or invoke MCP tools.
-- No runtime proxy/gateway is implemented in v0.1.0.
+- No runtime proxy/gateway is implemented in v0.1.x.
 - No database, web UI, OAuth/RBAC, Kubernetes deployment, or SaaS workflow is included.
 
 ## Roadmap

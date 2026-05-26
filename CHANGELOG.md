@@ -2,6 +2,14 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## 0.1.1 - 2026-05-26
+
+### Fixed
+
+- Fixed GitHub Actions CLI build output so Linux runners do not try to write a binary over the `argusgate/` source directory.
+- Updated source build instructions to write binaries under `bin/`.
+- Replaced the shortened license text with the canonical Apache-2.0 license so GitHub detects the project license correctly.
+
 ## 0.1.0 - 2026-05-22
 
 ### Added

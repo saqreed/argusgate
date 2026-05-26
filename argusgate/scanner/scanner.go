@@ -9,7 +9,7 @@ import (
 	"github.com/saqreed/argusgate/argusgate/scanner/detectors"
 )
 
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 func ScanFixtures(path string, p policy.Policy) (report.Report, error) {
 	doc, err := mcp.LoadFixtures(path)
