@@ -12,7 +12,7 @@ ArgusGate policies are YAML files.
 - `rules.allow_tools`: global tool allow list.
 - `rules.deny_tools`: global tool deny list.
 - `rules.deny_keywords`: metadata keywords that produce policy findings.
-- `rules.paths.deny`: denied path prefixes or substrings.
+- `rules.paths.deny`: denied path prefixes or sensitive path segments.
 - `rules.paths.allow`: allowed path prefixes.
 - `servers.<server_id>.allow_tools`: server-specific allow list.
 - `servers.<server_id>.deny_tools`: server-specific deny list.
@@ -43,6 +43,8 @@ ArgusGate applies MVP policy rules in this order:
 6. If `defaults.allow_unknown_tools` is `false`, tools outside the effective allow list are reported as policy violations.
 7. Path deny rules beat path allow rules.
 8. Missing policy falls back to default MVP policy: `fail_on: high` and `allow_unknown_tools: true`.
+
+Path rules are intentionally conservative. Values that look like paths, such as `/etc` or `./examples`, are treated as path prefixes and must match the start of the candidate path on a path boundary. Plain values, such as `.env` or `kubeconfig`, match path segments. ArgusGate does not treat arbitrary substring matches as path policy violations.
 
 ## Example
 

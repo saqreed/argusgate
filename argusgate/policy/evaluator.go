@@ -260,7 +260,10 @@ func matchesAnyPrefix(candidate string, prefixes []string) bool {
 		if normalizedPrefix == "" {
 			continue
 		}
-		if strings.HasPrefix(normalizedCandidate, normalizedPrefix) || strings.Contains(normalizedCandidate, normalizedPrefix) {
+		if isPathLikePrefix(normalizedPrefix) && hasPathPrefix(normalizedCandidate, normalizedPrefix) {
+			return true
+		}
+		if !isPathLikePrefix(normalizedPrefix) && containsPathSegment(normalizedCandidate, normalizedPrefix) {
 			return true
 		}
 	}
@@ -269,4 +272,30 @@ func matchesAnyPrefix(candidate string, prefixes []string) bool {
 
 func normalizePathText(value string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), "\\", "/"))
+}
+
+func isPathLikePrefix(value string) bool {
+	return strings.HasPrefix(value, "/") ||
+		strings.HasPrefix(value, "~/") ||
+		strings.HasPrefix(value, "./") ||
+		strings.Contains(value, "/")
+}
+
+func hasPathPrefix(candidate, prefix string) bool {
+	if candidate == prefix {
+		return true
+	}
+	if strings.HasSuffix(prefix, "/") {
+		return strings.HasPrefix(candidate, prefix)
+	}
+	return strings.HasPrefix(candidate, prefix+"/")
+}
+
+func containsPathSegment(candidate, segment string) bool {
+	for _, part := range strings.Split(candidate, "/") {
+		if part == segment || strings.HasPrefix(part, segment+".") {
+			return true
+		}
+	}
+	return false
 }

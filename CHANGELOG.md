@@ -6,6 +6,11 @@ All notable changes to ArgusGate will be documented in this file.
 
 ### Fixed
 
+- Preserved explicit `server_id` on top-level fixture tools and made synthetic fixture servers match those IDs.
+- Fixed nested tools under unnamed servers so they inherit the parsed fallback server ID instead of `fixtures`.
+- Reduced false positives in policy path matching by treating path rules as path prefixes or path segments instead of arbitrary substrings.
+- Reduced false positives where generic text about credentials or documentation updates was reported as sensitive paths or database write capability.
+- Detected URL-safe base64-like tool-poisoning payloads in tool metadata.
 - Fixed GitHub Actions CLI build output so Linux runners do not try to write a binary over the `argusgate/` source directory.
 - Updated source build instructions to write binaries under `bin/`.
 - Replaced the shortened license text with the canonical Apache-2.0 license so GitHub detects the project license correctly.

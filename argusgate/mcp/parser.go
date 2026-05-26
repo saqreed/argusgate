@@ -41,10 +41,10 @@ func loadDocument(path string, fixtureMode bool) (Document, error) {
 		}
 	}
 	if value, ok := root["tools"]; ok {
-		topLevelTools := parseTools("fixtures", value)
+		topLevelTools := parseTools("fixtures", value, true)
 		tools = append(tools, topLevelTools...)
 		if fixtureMode && len(servers) == 0 && len(topLevelTools) > 0 {
-			servers = append(servers, ServerConfig{ID: "fixtures", Tools: topLevelTools, Raw: map[string]any{"tools": value}})
+			servers = append(servers, syntheticServersForTools(topLevelTools, value)...)
 		}
 	}
 
@@ -57,6 +57,33 @@ func loadDocument(path string, fixtureMode bool) (Document, error) {
 	})
 
 	return Document{SourcePath: path, Servers: servers, Tools: tools}, nil
+}
+
+func syntheticServersForTools(tools []ToolDefinition, rawTools any) []ServerConfig {
+	byServer := make(map[string][]ToolDefinition)
+	for _, tool := range tools {
+		serverID := tool.ServerID
+		if serverID == "" {
+			serverID = "fixtures"
+		}
+		byServer[serverID] = append(byServer[serverID], tool)
+	}
+
+	ids := make([]string, 0, len(byServer))
+	for id := range byServer {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	servers := make([]ServerConfig, 0, len(ids))
+	for _, id := range ids {
+		servers = append(servers, ServerConfig{
+			ID:    id,
+			Tools: byServer[id],
+			Raw:   map[string]any{"tools": rawTools},
+		})
+	}
+	return servers
 }
 
 func readRoot(path string) (map[string]any, error) {
@@ -138,11 +165,11 @@ func parseServer(id string, raw map[string]any) ServerConfig {
 		Headers:   asStringMap(raw["headers"]),
 		Raw:       withoutKeys(raw, "id", "name", "server_id", "title", "command", "cmd", "args", "url", "endpoint", "base_url", "transport", "type", "env", "headers", "tools"),
 	}
-	server.Tools = parseTools(id, raw["tools"])
+	server.Tools = parseTools(server.ID, raw["tools"], false)
 	return server
 }
 
-func parseTools(serverID string, value any) []ToolDefinition {
+func parseTools(serverID string, value any, allowToolServerID bool) []ToolDefinition {
 	items, ok := value.([]any)
 	if !ok {
 		return nil
@@ -153,12 +180,17 @@ func parseTools(serverID string, value any) []ToolDefinition {
 		if !ok {
 			continue
 		}
-		tools = append(tools, parseTool(serverID, raw))
+		tools = append(tools, parseTool(serverID, raw, allowToolServerID))
 	}
 	return tools
 }
 
-func parseTool(serverID string, raw map[string]any) ToolDefinition {
+func parseTool(serverID string, raw map[string]any, allowToolServerID bool) ToolDefinition {
+	if allowToolServerID {
+		if explicitServerID := firstString(raw, "server_id", "server"); explicitServerID != "" {
+			serverID = explicitServerID
+		}
+	}
 	if serverID == "" {
 		serverID = firstString(raw, "server_id", "server")
 	}

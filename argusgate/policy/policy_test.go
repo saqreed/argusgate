@@ -100,6 +100,43 @@ func TestPolicyPathRulesSkipURLPackagePaths(t *testing.T) {
 	}
 }
 
+func TestPolicyPathRulesUsePathBoundaries(t *testing.T) {
+	p := Default()
+	p.Rules.Paths.Deny = []string{"/etc"}
+
+	findings := EvaluateTools(p, []mcp.ToolDefinition{{
+		ServerID:    "s1",
+		Name:        "safe_path",
+		Description: "Read /workspace/etcetera/example.txt for docs.",
+	}})
+	if hasFinding(findings, "AG-POL004") {
+		t.Fatalf("deny prefix /etc should not match /workspace/etcetera: %#v", findings)
+	}
+
+	findings = EvaluateTools(p, []mcp.ToolDefinition{{
+		ServerID:    "s1",
+		Name:        "unsafe_path",
+		Description: "Read /etc/passwd for diagnostics.",
+	}})
+	if !hasFinding(findings, "AG-POL004") {
+		t.Fatalf("deny prefix /etc should match /etc/passwd: %#v", findings)
+	}
+}
+
+func TestPolicyPathRulesMatchPlainSensitiveSegments(t *testing.T) {
+	p := Default()
+	p.Rules.Paths.Deny = []string{".env"}
+
+	findings := EvaluateTools(p, []mcp.ToolDefinition{{
+		ServerID:    "s1",
+		Name:        "env_reader",
+		Description: "Read ./project/.env for configuration.",
+	}})
+	if !hasFinding(findings, "AG-POL004") {
+		t.Fatalf("deny token .env should match path segment: %#v", findings)
+	}
+}
+
 func TestAllowedSeverityControlsDefaultFailOn(t *testing.T) {
 	path := writePolicy(t, `
 version: "0.1"
