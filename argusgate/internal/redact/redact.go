@@ -5,25 +5,28 @@ import (
 	"strings"
 )
 
-var redactors = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})`),
-	regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization)\s*[:=]\s*["']?)([^"'\s,;]{4,})`),
-	regexp.MustCompile(`(?i)((?:postgres|postgresql|mysql|mongodb|redis|amqp)://)([^\s"']+)`),
-	regexp.MustCompile(`eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`),
-	regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`),
+type rule struct {
+	rx          *regexp.Regexp
+	replacement string
+}
+
+var redactors = []rule{
+	{regexp.MustCompile(`(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})`), `${1}[REDACTED_SECRET]`},
+	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token)\s*[:=]\s*["']?)([^"'\s,;]{4,})`), `${1}[REDACTED_SECRET]`},
+	{regexp.MustCompile(`(?i)((?:postgres|postgresql|mysql|mongodb|redis|amqp)://)([^\s"']+)`), `${1}[REDACTED_SECRET]`},
+	{regexp.MustCompile(`(?i)((?:https?|mcp)://[^:/\s"']+:)([^@\s"']+)(@)`), `${1}[REDACTED_SECRET]${3}`},
+	{regexp.MustCompile(`(?i)([?&](?:api[_-]?key|token|password|passwd|secret|access[_-]?token)=)([^&#\s"']+)`), `${1}[REDACTED_SECRET]`},
+	{regexp.MustCompile(`eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`), `[REDACTED_JWT]`},
+	{regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`), `[REDACTED_PRIVATE_KEY]`},
+	{regexp.MustCompile(`\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b`), `[REDACTED_SECRET]`},
+	{regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`), `[REDACTED_SECRET]`},
+	{regexp.MustCompile(`\bsk-[A-Za-z0-9][A-Za-z0-9_-]{16,}\b`), `[REDACTED_SECRET]`},
 }
 
 func Text(value string) string {
 	result := value
-	for i, rx := range redactors {
-		switch i {
-		case 0, 1, 2:
-			result = rx.ReplaceAllString(result, `${1}[REDACTED_SECRET]`)
-		case 3:
-			result = rx.ReplaceAllString(result, `[REDACTED_JWT]`)
-		case 4:
-			result = rx.ReplaceAllString(result, `[REDACTED_PRIVATE_KEY]`)
-		}
+	for _, redactor := range redactors {
+		result = redactor.rx.ReplaceAllString(result, redactor.replacement)
 	}
 	return result
 }

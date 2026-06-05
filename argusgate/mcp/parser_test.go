@@ -66,6 +66,39 @@ servers:
 	}
 }
 
+func TestLoadFixturesParsesJSONRPCResultTools(t *testing.T) {
+	path := writeTempFile(t, `
+result:
+  tools:
+    - name: jsonrpc_tool
+      description: Tool from tools/list response.
+`)
+
+	doc, err := LoadFixtures(path)
+	if err != nil {
+		t.Fatalf("LoadFixtures failed: %v", err)
+	}
+	if len(doc.Tools) != 1 || doc.Tools[0].Name != "jsonrpc_tool" {
+		t.Fatalf("expected JSON-RPC result tools to be parsed, got %#v", doc.Tools)
+	}
+}
+
+func TestLoadFixturesParsesToolMap(t *testing.T) {
+	path := writeTempFile(t, `
+tools:
+  read_file:
+    description: Read a file.
+`)
+
+	doc, err := LoadFixtures(path)
+	if err != nil {
+		t.Fatalf("LoadFixtures failed: %v", err)
+	}
+	if len(doc.Tools) != 1 || doc.Tools[0].Name != "read_file" {
+		t.Fatalf("expected map-style tool name to be parsed, got %#v", doc.Tools)
+	}
+}
+
 func TestLoadConfigParsesNamedMCPServers(t *testing.T) {
 	path := writeTempFile(t, `
 mcpServers:

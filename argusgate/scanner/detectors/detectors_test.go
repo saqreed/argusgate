@@ -80,6 +80,30 @@ FAKE_PRIVATE_KEY_DO_NOT_USE
 	}
 }
 
+func TestSecretExposureDetectorFindsCommonTokenShapes(t *testing.T) {
+	tool := mcp.ToolDefinition{
+		ServerID: "s1",
+		Name:     "token_loader",
+		Description: strings.Join([]string{
+			"ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
+			"AKIAIOSFODNN7EXAMPLE",
+			"sk-FAKEFAKEFAKEFAKEFAKEFAKE",
+		}, " "),
+	}
+
+	findings := SecretExposureDetector{}.ScanTool(tool)
+	for _, id := range []string{"AG-SE006", "AG-SE007", "AG-SE008"} {
+		if !hasDetectorFinding(findings, id) {
+			t.Fatalf("expected %s for common token shapes, got %#v", id, findings)
+		}
+	}
+	for _, finding := range findings {
+		if containsAnyText(finding.Evidence, []string{"ghp_FAKE", "AKIAIOSFODNN7EXAMPLE", "sk-FAKE"}) {
+			t.Fatalf("secret leaked in evidence: %#v", finding)
+		}
+	}
+}
+
 func TestDangerousCapabilityDetectorFindsExpectedCapabilities(t *testing.T) {
 	cases := []struct {
 		name string
@@ -215,4 +239,13 @@ func severityOf(findings []report.Finding, id string) severity.Level {
 		}
 	}
 	return ""
+}
+
+func containsAnyText(text string, values []string) bool {
+	for _, value := range values {
+		if strings.Contains(text, value) {
+			return true
+		}
+	}
+	return false
 }

@@ -1,6 +1,9 @@
 package redact
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestTextRedactsSecrets(t *testing.T) {
 	input := `Authorization: Bearer FAKE_TOKEN_DO_NOT_USE_1234567890 password="FAKE_PASSWORD_DO_NOT_USE"`
@@ -17,6 +20,25 @@ func TestSnippetRedactsBeforeTruncating(t *testing.T) {
 	got := Snippet("token=FAKE_TOKEN_DO_NOT_USE_1234567890 and some other text", 30)
 	if containsAny(got, []string{"FAKE_TOKEN_DO_NOT_USE_1234567890"}) {
 		t.Fatalf("secret leaked in snippet: %s", got)
+	}
+}
+
+func TestTextRedactsCommonTokenShapesAndURLSecrets(t *testing.T) {
+	input := strings.Join([]string{
+		"ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
+		"AKIAIOSFODNN7EXAMPLE",
+		"sk-FAKEFAKEFAKEFAKEFAKEFAKE",
+		"https://user:SUPER_SECRET_PASSWORD@example.com/mcp?token=FAKE_TOKEN_DO_NOT_USE_1234567890",
+	}, " ")
+	got := Text(input)
+	if containsAny(got, []string{
+		"ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
+		"AKIAIOSFODNN7EXAMPLE",
+		"sk-FAKEFAKEFAKEFAKEFAKEFAKE",
+		"SUPER_SECRET_PASSWORD",
+		"FAKE_TOKEN_DO_NOT_USE_1234567890",
+	}) {
+		t.Fatalf("secret leaked after redaction: %s", got)
 	}
 }
 

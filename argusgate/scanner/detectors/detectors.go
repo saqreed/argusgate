@@ -164,6 +164,9 @@ var secretPatterns = []struct {
 	{"AG-SE003", "Private key block found in metadata", regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`), "high"},
 	{"AG-SE004", "Connection string found in metadata", regexp.MustCompile(`(?i)(postgres|postgresql|mysql|mongodb|redis|amqp)://[^\s"']+`), "high"},
 	{"AG-SE005", "JWT-like token found in metadata", regexp.MustCompile(`eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`), "medium"},
+	{"AG-SE006", "GitHub token-like value found in metadata", regexp.MustCompile(`\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b`), "high"},
+	{"AG-SE007", "Cloud access key-like value found in metadata", regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`), "high"},
+	{"AG-SE008", "API key-like value found in metadata", regexp.MustCompile(`\bsk-[A-Za-z0-9][A-Za-z0-9_-]{16,}\b`), "medium"},
 }
 
 func (d SecretExposureDetector) ScanServer(server mcp.ServerConfig) []report.Finding {

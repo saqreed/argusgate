@@ -40,12 +40,21 @@ func loadDocument(path string, fixtureMode bool) (Document, error) {
 			tools = append(tools, tool)
 		}
 	}
+	var looseTools []ToolDefinition
 	if value, ok := root["tools"]; ok {
 		topLevelTools := parseTools("fixtures", value, true)
 		tools = append(tools, topLevelTools...)
-		if fixtureMode && len(servers) == 0 && len(topLevelTools) > 0 {
-			servers = append(servers, syntheticServersForTools(topLevelTools, value)...)
+		looseTools = append(looseTools, topLevelTools...)
+	}
+	if result, ok := root["result"].(map[string]any); ok {
+		if value, ok := result["tools"]; ok {
+			resultTools := parseTools("fixtures", value, true)
+			tools = append(tools, resultTools...)
+			looseTools = append(looseTools, resultTools...)
 		}
+	}
+	if fixtureMode && len(servers) == 0 && len(looseTools) > 0 {
+		servers = append(servers, syntheticServersForTools(looseTools, looseTools)...)
 	}
 
 	sort.Slice(servers, func(i, j int) bool { return servers[i].ID < servers[j].ID })
@@ -170,15 +179,45 @@ func parseServer(id string, raw map[string]any) ServerConfig {
 }
 
 func parseTools(serverID string, value any, allowToolServerID bool) []ToolDefinition {
-	items, ok := value.([]any)
-	if !ok {
+	switch typed := value.(type) {
+	case []any:
+		return parseToolList(serverID, typed, allowToolServerID)
+	case map[string]any:
+		return parseToolMap(serverID, typed, allowToolServerID)
+	default:
 		return nil
 	}
+}
+
+func parseToolList(serverID string, items []any, allowToolServerID bool) []ToolDefinition {
 	tools := make([]ToolDefinition, 0, len(items))
 	for _, item := range items {
 		raw, ok := item.(map[string]any)
 		if !ok {
 			continue
+		}
+		tools = append(tools, parseTool(serverID, raw, allowToolServerID))
+	}
+	return tools
+}
+
+func parseToolMap(serverID string, items map[string]any, allowToolServerID bool) []ToolDefinition {
+	keys := make([]string, 0, len(items))
+	for key := range items {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	tools := make([]ToolDefinition, 0, len(keys))
+	for _, key := range keys {
+		raw, ok := items[key].(map[string]any)
+		if !ok {
+			raw = map[string]any{"description": fmt.Sprint(items[key])}
+		} else {
+			raw = copyAnyMap(raw)
+		}
+		if firstString(raw, "name", "id", "tool_name") == "" {
+			raw["name"] = key
 		}
 		tools = append(tools, parseTool(serverID, raw, allowToolServerID))
 	}
@@ -209,6 +248,14 @@ func parseTool(serverID string, raw map[string]any, allowToolServerID bool) Tool
 		Meta:         asAnyMap(firstAny(raw, "_meta", "meta", "metadata")),
 		Raw:          withoutKeys(raw, "server_id", "server", "name", "id", "tool_name", "title", "description", "desc", "inputSchema", "input_schema", "schema", "outputSchema", "output_schema", "annotations", "_meta", "meta", "metadata"),
 	}
+}
+
+func copyAnyMap(raw map[string]any) map[string]any {
+	out := make(map[string]any, len(raw))
+	for key, value := range raw {
+		out[key] = value
+	}
+	return out
 }
 
 func withoutKeys(raw map[string]any, keys ...string) map[string]any {

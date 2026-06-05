@@ -2,6 +2,17 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## 0.1.2 - 2026-06-06
+
+### Fixed
+
+- Redacted common token shapes such as GitHub tokens, cloud access keys, OpenAI-style API keys, URL basic-auth passwords, and token query parameters.
+- Redacted server URLs in JSON report summaries so credentials embedded in endpoints do not leak through report metadata.
+- Detected common token shapes in tool, server, config, and fixture metadata.
+- Parsed JSON-RPC-style `result.tools` fixture files from MCP `tools/list` responses.
+- Parsed map-style fixture tool definitions where the map key is the tool name.
+- Ignored `deep-research-report.md` so internal research notes do not get re-added to the public repository.
+
 ## 0.1.1 - 2026-05-26
 
 ### Fixed

@@ -103,7 +103,7 @@ func summarizeServers(servers []mcp.ServerConfig) []ServerSummary {
 			Name:      server.Name,
 			Transport: server.Transport,
 			Command:   server.Command,
-			URL:       server.URL,
+			URL:       redact.Snippet(server.URL, 240),
 			ToolCount: len(server.Tools),
 		})
 	}
