@@ -2,6 +2,15 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## 0.1.3 - 2026-06-10
+
+### Fixed
+
+- Reduced SQL false positives when read-only tools mention unsupported write statements such as `UPDATE`, `DELETE`, or `DROP`.
+- Reduced dangerous capability false positives by matching single-word capability indicators on term boundaries instead of arbitrary substrings.
+- Detected and redacted Basic authorization values in server and tool metadata.
+- Made redacted evidence snippets UTF-8 safe when truncating non-ASCII text.
+
 ## 0.1.2 - 2026-06-06
 
 ### Fixed

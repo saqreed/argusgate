@@ -3,6 +3,7 @@ package redact
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestTextRedactsSecrets(t *testing.T) {
@@ -39,6 +40,16 @@ func TestTextRedactsCommonTokenShapesAndURLSecrets(t *testing.T) {
 		"FAKE_TOKEN_DO_NOT_USE_1234567890",
 	}) {
 		t.Fatalf("secret leaked after redaction: %s", got)
+	}
+}
+
+func TestSnippetTruncatesUTF8Safely(t *testing.T) {
+	got := Snippet("ключ token=FAKE_TOKEN_DO_NOT_USE_1234567890 значение", 6)
+	if !utf8.ValidString(got) {
+		t.Fatalf("snippet is not valid UTF-8: %q", got)
+	}
+	if containsAny(got, []string{"FAKE_TOKEN_DO_NOT_USE_1234567890"}) {
+		t.Fatalf("secret leaked in snippet: %s", got)
 	}
 }
 

@@ -145,7 +145,7 @@ Example shape:
 ```json
 {
   "scanned_at": "2026-05-22T12:00:00Z",
-  "argusgate_version": "0.1.2",
+  "argusgate_version": "0.1.3",
   "source_type": "fixtures",
   "source_path": "examples/fixtures/malicious-tools.yaml",
   "servers": [],

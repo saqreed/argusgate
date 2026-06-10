@@ -160,6 +160,7 @@ var secretPatterns = []struct {
 	confidence string
 }{
 	{"AG-SE001", "Bearer token found in metadata", regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._~+/=-]{8,}`), "high"},
+	{"AG-SE009", "Basic authorization value found in metadata", regexp.MustCompile(`(?i)Basic\s+[A-Za-z0-9+/=]{8,}`), "high"},
 	{"AG-SE002", "Secret-like key/value found in metadata", regexp.MustCompile(`(?i)(api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization)\s*[:=]\s*["']?[^"'\s,;]{4,}`), "medium"},
 	{"AG-SE003", "Private key block found in metadata", regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`), "high"},
 	{"AG-SE004", "Connection string found in metadata", regexp.MustCompile(`(?i)(postgres|postgresql|mysql|mongodb|redis|amqp)://[^\s"']+`), "high"},
@@ -445,9 +446,11 @@ func sensitivePathFindings(serverID, toolName, location, text string) []report.F
 type SQLRiskDetector struct{}
 
 var (
-	sqlWriteRX = regexp.MustCompile(`(?i)\b(drop|delete|update|insert|alter|truncate)\b|copy\s+.+\s+to\s+program|xp_cmdshell|load_extension|sys_eval`)
-	sqlReadRX  = regexp.MustCompile(`(?i)\b(select|with)\b`)
-	dbWriteRX  = regexp.MustCompile(`(?i)\b(drop|delete|update|insert|alter|truncate|merge|create|grant|revoke)\b|copy\s+.+\s+to\s+program|xp_cmdshell|load_extension|sys_eval`)
+	sqlWriteRX           = regexp.MustCompile(`(?i)\b(drop|delete|update|insert|alter|truncate)\b|copy\s+.+\s+to\s+program|xp_cmdshell|load_extension|sys_eval`)
+	sqlReadRX            = regexp.MustCompile(`(?i)\b(select|with)\b`)
+	dbWriteRX            = regexp.MustCompile(`(?i)\b(drop|delete|update|insert|alter|truncate|merge|create|grant|revoke)\b|copy\s+.+\s+to\s+program|xp_cmdshell|load_extension|sys_eval`)
+	sqlNegativeContextRX = regexp.MustCompile(`(?i)\b(read[- ]only|select[- ]only|does not support|not support|no write|without write|without modifying)\b`)
+	sqlPositiveContextRX = regexp.MustCompile(`(?i)\b(can|may|supports?|allows?|executes?|runs?|write[- ]capable|admin)\b[^.]{0,120}\b(drop|delete|update|insert|alter|truncate|merge|create|grant|revoke)\b`)
 )
 
 func (d SQLRiskDetector) ScanServer(mcp.ServerConfig) []report.Finding {
@@ -461,7 +464,7 @@ func (d SQLRiskDetector) ScanTool(tool mcp.ToolDefinition) []report.Finding {
 		if !looksDatabaseRelated(tool, blob.Text) {
 			continue
 		}
-		if sqlWriteRX.MatchString(blob.Text) {
+		if containsSQLWriteRisk(blob.Text) {
 			if _, ok := seen["AG-SQL001"]; ok {
 				continue
 			}
@@ -512,16 +515,120 @@ func looksDatabaseRelated(tool mcp.ToolDefinition, text string) bool {
 }
 
 func containsDatabaseWriteTerm(text string) bool {
-	return dbWriteRX.MatchString(text)
+	return containsDatabaseWriteRisk(text)
 }
 
 func containsAny(text string, needles []string) bool {
+	text = strings.ToLower(text)
 	for _, needle := range needles {
-		if strings.Contains(text, strings.ToLower(needle)) {
+		if containsPattern(text, strings.ToLower(needle)) {
 			return true
 		}
 	}
 	return false
+}
+
+func containsSQLWriteRisk(text string) bool {
+	return containsWriteRisk(text, sqlWriteRX)
+}
+
+func containsDatabaseWriteRisk(text string) bool {
+	return containsWriteRisk(text, dbWriteRX)
+}
+
+func containsWriteRisk(text string, rx *regexp.Regexp) bool {
+	for _, loc := range rx.FindAllStringIndex(text, -1) {
+		if !isWriteMentionNegated(text, loc) {
+			return true
+		}
+	}
+	return false
+}
+
+func isWriteMentionNegated(text string, loc []int) bool {
+	sentence := sentenceAround(text, loc)
+	if !sqlNegativeContextRX.MatchString(sentence) {
+		return false
+	}
+	return !hasPositiveSQLWriteContext(sentence)
+}
+
+func hasPositiveSQLWriteContext(text string) bool {
+	for _, loc := range sqlPositiveContextRX.FindAllStringIndex(text, -1) {
+		prefixStart := loc[0] - 16
+		if prefixStart < 0 {
+			prefixStart = 0
+		}
+		prefix := strings.ToLower(text[prefixStart:loc[0]])
+		if strings.Contains(prefix, "does not ") || strings.Contains(prefix, "not ") || strings.Contains(prefix, "no write ") {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func sentenceAround(text string, loc []int) string {
+	start := loc[0]
+	for start > 0 {
+		if isSentenceBoundary(text[start-1]) {
+			break
+		}
+		start--
+	}
+	end := loc[1]
+	for end < len(text) {
+		if isSentenceBoundary(text[end]) {
+			break
+		}
+		end++
+	}
+	return text[start:end]
+}
+
+func isSentenceBoundary(ch byte) bool {
+	return ch == '.' || ch == '\n' || ch == '\r' || ch == ';'
+}
+
+func containsPattern(text, needle string) bool {
+	if needle == "" {
+		return false
+	}
+	if hasNonTermChar(needle) {
+		return strings.Contains(text, needle)
+	}
+	start := 0
+	for {
+		index := strings.Index(text[start:], needle)
+		if index == -1 {
+			return false
+		}
+		index += start
+		end := index + len(needle)
+		beforeBoundary := index == 0 || isTermBoundary(text[index-1])
+		afterBoundary := end == len(text) || isTermBoundary(text[end])
+		if beforeBoundary && afterBoundary {
+			return true
+		}
+		start = end
+	}
+}
+
+func hasNonTermChar(value string) bool {
+	for i := 0; i < len(value); i++ {
+		if !isASCIIAlphaNumeric(value[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+func isTermBoundary(ch byte) bool {
+	return !(isASCIIAlphaNumeric(ch) || ch == '_')
+}
+
+func isASCIIAlphaNumeric(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
 }
 
 func containsSensitivePathSegment(text, segment string) bool {

@@ -12,6 +12,7 @@ type rule struct {
 
 var redactors = []rule{
 	{regexp.MustCompile(`(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})`), `${1}[REDACTED_SECRET]`},
+	{regexp.MustCompile(`(?i)(Basic\s+)([A-Za-z0-9+/=]{8,})`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token)\s*[:=]\s*["']?)([^"'\s,;]{4,})`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)((?:postgres|postgresql|mysql|mongodb|redis|amqp)://)([^\s"']+)`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)((?:https?|mcp)://[^:/\s"']+:)([^@\s"']+)(@)`), `${1}[REDACTED_SECRET]${3}`},
@@ -33,11 +34,12 @@ func Text(value string) string {
 
 func Snippet(value string, max int) string {
 	clean := strings.Join(strings.Fields(Text(value)), " ")
-	if max <= 0 || len(clean) <= max {
+	runes := []rune(clean)
+	if max <= 0 || len(runes) <= max {
 		return clean
 	}
 	if max <= 3 {
-		return clean[:max]
+		return string(runes[:max])
 	}
-	return clean[:max-3] + "..."
+	return string(runes[:max-3]) + "..."
 }

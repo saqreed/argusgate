@@ -104,6 +104,23 @@ func TestSecretExposureDetectorFindsCommonTokenShapes(t *testing.T) {
 	}
 }
 
+func TestSecretExposureDetectorFindsAndRedactsBasicAuthorization(t *testing.T) {
+	server := mcp.ServerConfig{
+		ID:      "s1",
+		Headers: map[string]string{"Authorization": "Basic ZmFrZTpzZWNyZXQ="},
+	}
+
+	findings := SecretExposureDetector{}.ScanServer(server)
+	if !hasDetectorFinding(findings, "AG-SE009") {
+		t.Fatalf("expected basic authorization finding, got %#v", findings)
+	}
+	for _, finding := range findings {
+		if strings.Contains(finding.Evidence, "ZmFrZTpzZWNyZXQ=") {
+			t.Fatalf("basic auth payload leaked in evidence: %#v", finding)
+		}
+	}
+}
+
 func TestDangerousCapabilityDetectorFindsExpectedCapabilities(t *testing.T) {
 	cases := []struct {
 		name string
@@ -152,6 +169,19 @@ func TestDangerousCapabilityDetectorDoesNotTreatGenericUpdateAsDatabaseWrite(t *
 	findings := DangerousCapabilityDetector{}.ScanTool(tool)
 	if hasDetectorFinding(findings, "AG-DC008") {
 		t.Fatalf("generic update text should not be classified as database write: %#v", findings)
+	}
+}
+
+func TestDangerousCapabilityDetectorUsesTermBoundaries(t *testing.T) {
+	tool := mcp.ToolDefinition{
+		ServerID:    "s1",
+		Name:        "city_docs",
+		Description: "Coordinate embassy scheduling notes for support teams.",
+	}
+
+	findings := DangerousCapabilityDetector{}.ScanTool(tool)
+	if hasDetectorFinding(findings, "AG-DC001") {
+		t.Fatalf("substring inside normal word should not be classified as shell capability: %#v", findings)
 	}
 }
 
@@ -220,6 +250,40 @@ func TestSQLRiskDetectorClassifiesReadOnlyAndWrite(t *testing.T) {
 	}
 	if severityOf(writeFindings, "AG-SQL001") != severity.High {
 		t.Fatalf("expected high write severity, got %#v", writeFindings)
+	}
+}
+
+func TestSQLRiskDetectorDoesNotFlagExplicitReadOnlyNegativeWriteText(t *testing.T) {
+	tool := mcp.ToolDefinition{
+		ServerID:    "s1",
+		Name:        "sql_readonly",
+		Description: "Run read-only SQL SELECT queries. Does not support UPDATE, DELETE, DROP, INSERT, ALTER, or TRUNCATE statements.",
+	}
+
+	sqlFindings := SQLRiskDetector{}.ScanTool(tool)
+	if !hasDetectorFinding(sqlFindings, "AG-SQL002") {
+		t.Fatalf("expected read-only SQL finding, got %#v", sqlFindings)
+	}
+	if hasDetectorFinding(sqlFindings, "AG-SQL001") {
+		t.Fatalf("explicitly unsupported write statements should not be classified as SQL write risk: %#v", sqlFindings)
+	}
+
+	capabilityFindings := DangerousCapabilityDetector{}.ScanTool(tool)
+	if hasDetectorFinding(capabilityFindings, "AG-DC008") {
+		t.Fatalf("explicitly unsupported write statements should not be classified as database write capability: %#v", capabilityFindings)
+	}
+}
+
+func TestSQLRiskDetectorStillFlagsWriteWhenOnlySomeStatementsAreUnsupported(t *testing.T) {
+	tool := mcp.ToolDefinition{
+		ServerID:    "s1",
+		Name:        "sql_editor",
+		Description: "Run SQL queries. Can UPDATE customer rows. Does not support DROP statements.",
+	}
+
+	findings := SQLRiskDetector{}.ScanTool(tool)
+	if !hasDetectorFinding(findings, "AG-SQL001") {
+		t.Fatalf("expected SQL write finding when UPDATE is supported, got %#v", findings)
 	}
 }
 
