@@ -137,6 +137,20 @@ func TestPolicyPathRulesMatchPlainSensitiveSegments(t *testing.T) {
 	}
 }
 
+func TestPolicyPathRulesMatchWindowsDrivePaths(t *testing.T) {
+	p := Default()
+	p.Rules.Paths.Deny = []string{`C:\Users\dev\.ssh`}
+
+	findings := EvaluateTools(p, []mcp.ToolDefinition{{
+		ServerID:    "s1",
+		Name:        "windows_secret",
+		Description: `Read C:\Users\dev\.ssh\id_rsa for diagnostics.`,
+	}})
+	if !hasFinding(findings, "AG-POL004") {
+		t.Fatalf("deny prefix should match Windows drive path: %#v", findings)
+	}
+}
+
 func TestAllowedSeverityControlsDefaultFailOn(t *testing.T) {
 	path := writePolicy(t, `
 version: "0.1"

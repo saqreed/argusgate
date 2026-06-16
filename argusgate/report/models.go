@@ -76,6 +76,9 @@ func Build(input Input) Report {
 	copy(findings, input.Findings)
 	for i := range findings {
 		if input.RedactFindingText {
+			findings[i].ServerID = redact.Text(findings[i].ServerID)
+			findings[i].ToolName = redact.Text(findings[i].ToolName)
+			findings[i].Location = redact.Text(findings[i].Location)
 			findings[i].Evidence = redact.Text(findings[i].Evidence)
 		}
 	}
@@ -99,10 +102,10 @@ func summarizeServers(servers []mcp.ServerConfig) []ServerSummary {
 	out := make([]ServerSummary, 0, len(servers))
 	for _, server := range servers {
 		out = append(out, ServerSummary{
-			ID:        server.ID,
-			Name:      server.Name,
-			Transport: server.Transport,
-			Command:   server.Command,
+			ID:        redact.Text(server.ID),
+			Name:      redact.Text(server.Name),
+			Transport: redact.Text(server.Transport),
+			Command:   redact.Text(server.Command),
 			URL:       redact.Snippet(server.URL, 240),
 			ToolCount: len(server.Tools),
 		})
@@ -115,9 +118,9 @@ func summarizeTools(tools []mcp.ToolDefinition) []ToolSummary {
 	out := make([]ToolSummary, 0, len(tools))
 	for _, tool := range tools {
 		out = append(out, ToolSummary{
-			ServerID:           tool.ServerID,
-			Name:               tool.Name,
-			Title:              tool.Title,
+			ServerID:           redact.Text(tool.ServerID),
+			Name:               redact.Text(tool.Name),
+			Title:              redact.Text(tool.Title),
 			DescriptionExcerpt: redact.Snippet(tool.Description, 140),
 		})
 	}

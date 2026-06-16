@@ -11,7 +11,7 @@ import (
 	"github.com/saqreed/argusgate/argusgate/scanner/severity"
 )
 
-var policyPathCandidate = regexp.MustCompile(`(?i)(~[/\\][^\s"'<>),;]+|(?:/[A-Za-z0-9._-]+){1,}|(?:\./[A-Za-z0-9._/-]+)|[A-Za-z0-9._-]*(?:id_rsa|id_ed25519|kubeconfig|credentials|tokens|\.env)[A-Za-z0-9._/-]*)`)
+var policyPathCandidate = regexp.MustCompile(`(?i)(~[/\\][^\s"'<>),;]+|[A-Za-z]:[/\\][^\s"'<>),;]+|(?:/[A-Za-z0-9._-]+){1,}|(?:\./[A-Za-z0-9._/-]+)|[A-Za-z0-9._-]*(?:id_rsa|id_ed25519|kubeconfig|credentials|tokens|\.env)[A-Za-z0-9._/-]*)`)
 
 func EvaluateTools(p Policy, tools []mcp.ToolDefinition) []report.Finding {
 	var findings []report.Finding

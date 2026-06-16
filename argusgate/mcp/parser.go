@@ -22,6 +22,9 @@ func loadDocument(path string, fixtureMode bool) (Document, error) {
 	if err != nil {
 		return Document{}, err
 	}
+	if err := validateDocumentShapes(path, root); err != nil {
+		return Document{}, err
+	}
 
 	var servers []ServerConfig
 	if value, ok := root["servers"]; ok {
@@ -66,6 +69,104 @@ func loadDocument(path string, fixtureMode bool) (Document, error) {
 	})
 
 	return Document{SourcePath: path, Servers: servers, Tools: tools}, nil
+}
+
+func validateDocumentShapes(path string, root map[string]any) error {
+	if value, ok := root["servers"]; ok {
+		if err := validateServersShape("servers", value); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+	}
+	if value, ok := root["mcpServers"]; ok {
+		if err := validateNamedServerMapShape("mcpServers", value); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+	}
+	if value, ok := root["mcp_servers"]; ok {
+		if err := validateNamedServerMapShape("mcp_servers", value); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+	}
+	if value, ok := root["tools"]; ok {
+		if err := validateToolsShape("tools", value); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+	}
+	if value, ok := root["result"]; ok {
+		result, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("parse %s: result: expected object", path)
+		}
+		if tools, ok := result["tools"]; ok {
+			if err := validateToolsShape("result.tools", tools); err != nil {
+				return fmt.Errorf("parse %s: %w", path, err)
+			}
+		}
+	}
+	return nil
+}
+
+func validateServersShape(location string, value any) error {
+	switch typed := value.(type) {
+	case map[string]any:
+		return validateNamedServerMapShape(location, typed)
+	case []any:
+		for i, item := range typed {
+			raw, ok := item.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s[%d]: expected server object", location, i)
+			}
+			if tools, ok := raw["tools"]; ok {
+				if err := validateToolsShape(fmt.Sprintf("%s[%d].tools", location, i), tools); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("%s: expected server object or list", location)
+	}
+}
+
+func validateNamedServerMapShape(location string, value any) error {
+	rawMap, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s: expected server object map", location)
+	}
+	keys := make([]string, 0, len(rawMap))
+	for key := range rawMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, id := range keys {
+		item := rawMap[id]
+		raw, ok := item.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s.%s: expected server object", location, id)
+		}
+		if tools, ok := raw["tools"]; ok {
+			if err := validateToolsShape(fmt.Sprintf("%s.%s.tools", location, id), tools); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateToolsShape(location string, value any) error {
+	switch typed := value.(type) {
+	case []any:
+		for i, item := range typed {
+			if _, ok := item.(map[string]any); !ok {
+				return fmt.Errorf("%s[%d]: expected tool object", location, i)
+			}
+		}
+		return nil
+	case map[string]any:
+		return nil
+	default:
+		return fmt.Errorf("%s: expected tool object map or list", location)
+	}
 }
 
 func syntheticServersForTools(tools []ToolDefinition, rawTools any) []ServerConfig {

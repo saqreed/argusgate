@@ -168,6 +168,7 @@ var secretPatterns = []struct {
 	{"AG-SE006", "GitHub token-like value found in metadata", regexp.MustCompile(`\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b`), "high"},
 	{"AG-SE007", "Cloud access key-like value found in metadata", regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`), "high"},
 	{"AG-SE008", "API key-like value found in metadata", regexp.MustCompile(`\bsk-[A-Za-z0-9][A-Za-z0-9_-]{16,}\b`), "medium"},
+	{"AG-SE010", "URL userinfo credential found in metadata", regexp.MustCompile(`(?i)\b(?:https?|mcp)://[^:/\s"']+:[^@\s"']+@`), "high"},
 }
 
 func (d SecretExposureDetector) ScanServer(server mcp.ServerConfig) []report.Finding {
@@ -309,6 +310,17 @@ var capabilityRules = []struct {
 		},
 		explanation: "The tool appears able to modify database state.",
 	},
+	{
+		id:       "AG-DC009",
+		title:    "Host system administration capability",
+		severity: severity.High,
+		category: "dangerous-capability",
+		mapping:  "MCP02 Scope Creep / Excessive Permissions",
+		patterns: []string{
+			"systemctl", "launchctl", "schtasks", "windows registry", "system services", "host firewall", "sudo",
+		},
+		explanation: "The tool appears able to administer host system services, startup tasks, registry settings, firewall rules, or privileged host operations.",
+	},
 }
 
 func (d DangerousCapabilityDetector) ScanServer(mcp.ServerConfig) []report.Finding {
@@ -449,7 +461,7 @@ var (
 	sqlWriteRX           = regexp.MustCompile(`(?i)\b(drop|delete|update|insert|alter|truncate)\b|copy\s+.+\s+to\s+program|xp_cmdshell|load_extension|sys_eval`)
 	sqlReadRX            = regexp.MustCompile(`(?i)\b(select|with)\b`)
 	dbWriteRX            = regexp.MustCompile(`(?i)\b(drop|delete|update|insert|alter|truncate|merge|create|grant|revoke)\b|copy\s+.+\s+to\s+program|xp_cmdshell|load_extension|sys_eval`)
-	sqlNegativeContextRX = regexp.MustCompile(`(?i)\b(read[- ]only|select[- ]only|does not support|not support|no write|without write|without modifying)\b`)
+	sqlNegativeContextRX = regexp.MustCompile(`(?i)\b(read[- ]only|select[- ]only|does not support|not support|no write|without write|without modifying|blocks?|rejects?|forbids?|disallows?|prohibits?|prevents?)\b`)
 	sqlPositiveContextRX = regexp.MustCompile(`(?i)\b(can|may|supports?|allows?|executes?|runs?|write[- ]capable|admin)\b[^.]{0,120}\b(drop|delete|update|insert|alter|truncate|merge|create|grant|revoke)\b`)
 )
 

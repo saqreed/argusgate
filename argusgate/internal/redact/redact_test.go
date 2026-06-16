@@ -29,7 +29,7 @@ func TestTextRedactsCommonTokenShapesAndURLSecrets(t *testing.T) {
 		"ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
 		"AKIAIOSFODNN7EXAMPLE",
 		"sk-FAKEFAKEFAKEFAKEFAKEFAKE",
-		"https://user:SUPER_SECRET_PASSWORD@example.com/mcp?token=FAKE_TOKEN_DO_NOT_USE_1234567890",
+		"https://FAKE_TOKEN_DO_NOT_USE_1234567890:SUPER_SECRET_PASSWORD@example.com/mcp?token=FAKE_TOKEN_DO_NOT_USE_1234567890",
 	}, " ")
 	got := Text(input)
 	if containsAny(got, []string{

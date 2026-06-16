@@ -2,6 +2,18 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## 0.1.4 - 2026-06-17
+
+### Fixed
+
+- Redacted secret-like server IDs, tool names, finding locations, server summaries, and tool summaries in JSON reports.
+- Redacted the full URL userinfo segment so token-like usernames in `user:password@host` URLs do not leak.
+- Detected URL userinfo credentials such as `https://user:password@example.test` as secret exposure findings.
+- Rejected invalid MCP config and fixture shapes instead of silently scanning empty server or tool objects.
+- Matched Windows drive paths in policy path rules.
+- Detected host system administration capabilities such as `systemctl`, `launchctl`, scheduled tasks, registry operations, firewall operations, and privileged host operations.
+- Reduced SQL false positives when metadata says write statements are blocked, rejected, forbidden, disallowed, prohibited, or prevented.
+
 ## 0.1.3 - 2026-06-10
 
 ### Fixed

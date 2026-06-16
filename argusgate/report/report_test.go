@@ -13,7 +13,7 @@ import (
 func TestBuildSortsFindingsAndRedactsEvidence(t *testing.T) {
 	r := Build(Input{
 		ScannedAt:  time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
-		Version:    "0.1.3",
+		Version:    "0.1.4",
 		SourceType: "fixtures",
 		SourcePath: "fixture.yaml",
 		Servers: []mcp.ServerConfig{{
@@ -49,8 +49,49 @@ func TestBuildSortsFindingsAndRedactsEvidence(t *testing.T) {
 	}
 }
 
+func TestBuildRedactsSecretLikeIdentifiersAndSummaries(t *testing.T) {
+	secret := "FAKE_TOKEN_DO_NOT_USE_1234567890"
+	r := Build(Input{
+		ScannedAt:  time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
+		Version:    "0.1.4",
+		SourceType: "fixtures",
+		SourcePath: "fixture.yaml",
+		Servers: []mcp.ServerConfig{{
+			ID:      "token=" + secret,
+			Name:    "Authorization: Bearer " + secret,
+			Command: "server --token=" + secret,
+			URL:     "https://example.test/mcp",
+		}},
+		Tools: []mcp.ToolDefinition{{
+			ServerID:    "token=" + secret,
+			Name:        "Bearer " + secret,
+			Title:       "password=" + secret,
+			Description: "safe description",
+		}},
+		Findings: []Finding{{
+			ID:          "HIGH",
+			Severity:    severity.High,
+			ServerID:    "token=" + secret,
+			ToolName:    "Bearer " + secret,
+			Location:    "tools[Bearer " + secret + "].description",
+			Evidence:    "Bearer " + secret,
+			Explanation: "test finding",
+			Confidence:  "high",
+		}},
+		RedactFindingText: true,
+	})
+
+	data, err := JSONBytes(r)
+	if err != nil {
+		t.Fatalf("JSONBytes failed: %v", err)
+	}
+	if strings.Contains(string(data), secret) {
+		t.Fatalf("secret leaked in report JSON: %s", string(data))
+	}
+}
+
 func TestJSONBytesProducesReportJSON(t *testing.T) {
-	data, err := JSONBytes(Report{ArgusGateVersion: "0.1.3"})
+	data, err := JSONBytes(Report{ArgusGateVersion: "0.1.4"})
 	if err != nil {
 		t.Fatalf("JSONBytes failed: %v", err)
 	}
@@ -58,7 +99,7 @@ func TestJSONBytesProducesReportJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if decoded.ArgusGateVersion != "0.1.3" {
+	if decoded.ArgusGateVersion != "0.1.4" {
 		t.Fatalf("unexpected version: %s", decoded.ArgusGateVersion)
 	}
 }

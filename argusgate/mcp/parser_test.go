@@ -131,6 +131,26 @@ func TestLoadConfigRejectsNonObject(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRejectsInvalidNamedServerShape(t *testing.T) {
+	path := writeTempFile(t, `
+mcpServers:
+  local-filesystem: npx
+`)
+	if _, err := LoadConfig(path); err == nil {
+		t.Fatal("expected invalid server shape error")
+	}
+}
+
+func TestLoadFixturesRejectsInvalidToolListItem(t *testing.T) {
+	path := writeTempFile(t, `
+tools:
+  - read_file
+`)
+	if _, err := LoadFixtures(path); err == nil {
+		t.Fatal("expected invalid tool shape error")
+	}
+}
+
 func writeTempFile(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "input.yaml")

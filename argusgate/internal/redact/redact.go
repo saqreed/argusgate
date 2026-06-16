@@ -15,7 +15,7 @@ var redactors = []rule{
 	{regexp.MustCompile(`(?i)(Basic\s+)([A-Za-z0-9+/=]{8,})`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token)\s*[:=]\s*["']?)([^"'\s,;]{4,})`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)((?:postgres|postgresql|mysql|mongodb|redis|amqp)://)([^\s"']+)`), `${1}[REDACTED_SECRET]`},
-	{regexp.MustCompile(`(?i)((?:https?|mcp)://[^:/\s"']+:)([^@\s"']+)(@)`), `${1}[REDACTED_SECRET]${3}`},
+	{regexp.MustCompile(`(?i)((?:https?|mcp)://)([^@\s"']+:[^@\s"']+)(@)`), `${1}[REDACTED_SECRET]${3}`},
 	{regexp.MustCompile(`(?i)([?&](?:api[_-]?key|token|password|passwd|secret|access[_-]?token)=)([^&#\s"']+)`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`), `[REDACTED_JWT]`},
 	{regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`), `[REDACTED_PRIVATE_KEY]`},

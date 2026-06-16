@@ -24,7 +24,7 @@ func TestRunHelpAndVersion(t *testing.T) {
 	if code := Run([]string{"--version"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("version exit code = %d, stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "argusgate version 0.1.3") {
+	if !strings.Contains(stdout.String(), "argusgate version 0.1.4") {
 		t.Fatalf("unexpected version output: %s", stdout.String())
 	}
 }

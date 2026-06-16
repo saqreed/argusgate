@@ -121,6 +121,23 @@ func TestSecretExposureDetectorFindsAndRedactsBasicAuthorization(t *testing.T) {
 	}
 }
 
+func TestSecretExposureDetectorFindsAndRedactsURLUserInfoCredentials(t *testing.T) {
+	server := mcp.ServerConfig{
+		ID:  "s1",
+		URL: "https://user:FAKE_PASSWORD_DO_NOT_USE@example.test/mcp",
+	}
+
+	findings := SecretExposureDetector{}.ScanServer(server)
+	if !hasDetectorFinding(findings, "AG-SE010") {
+		t.Fatalf("expected URL userinfo credential finding, got %#v", findings)
+	}
+	for _, finding := range findings {
+		if strings.Contains(finding.Evidence, "FAKE_PASSWORD_DO_NOT_USE") {
+			t.Fatalf("URL credential leaked in evidence: %#v", finding)
+		}
+	}
+}
+
 func TestDangerousCapabilityDetectorFindsExpectedCapabilities(t *testing.T) {
 	cases := []struct {
 		name string
@@ -146,6 +163,11 @@ func TestDangerousCapabilityDetectorFindsExpectedCapabilities(t *testing.T) {
 			name: "browser",
 			tool: mcp.ToolDefinition{ServerID: "s1", Name: "browser_drive", Description: "Use Playwright browser automation to click buttons."},
 			id:   "AG-DC005",
+		},
+		{
+			name: "system admin",
+			tool: mcp.ToolDefinition{ServerID: "s1", Name: "service_admin", Description: "Manage host system services with systemctl."},
+			id:   "AG-DC009",
 		},
 	}
 
@@ -284,6 +306,22 @@ func TestSQLRiskDetectorStillFlagsWriteWhenOnlySomeStatementsAreUnsupported(t *t
 	findings := SQLRiskDetector{}.ScanTool(tool)
 	if !hasDetectorFinding(findings, "AG-SQL001") {
 		t.Fatalf("expected SQL write finding when UPDATE is supported, got %#v", findings)
+	}
+}
+
+func TestSQLRiskDetectorDoesNotFlagBlockedWriteStatements(t *testing.T) {
+	tool := mcp.ToolDefinition{
+		ServerID:    "s1",
+		Name:        "sql_guarded_reader",
+		Description: "Run SQL SELECT queries. Blocks DROP and DELETE statements.",
+	}
+
+	findings := SQLRiskDetector{}.ScanTool(tool)
+	if !hasDetectorFinding(findings, "AG-SQL002") {
+		t.Fatalf("expected read-only SQL finding, got %#v", findings)
+	}
+	if hasDetectorFinding(findings, "AG-SQL001") {
+		t.Fatalf("blocked write statements should not be classified as SQL write risk: %#v", findings)
 	}
 }
 
