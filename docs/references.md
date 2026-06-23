@@ -33,3 +33,11 @@ Design influence: confirmed that local config and tool-description scanning are 
 - Paper page: https://arxiv.org/abs/2508.14925
 
 Design influence: kept malicious examples focused on tool poisoning patterns and future red-team fixture expansion, without adding runtime benchmarking to the MVP.
+
+## GitHub Actions And Release Automation
+
+- GitHub CLI in workflows: https://docs.github.com/actions/using-workflows/using-github-cli-in-workflows
+- GITHUB_TOKEN authentication and permissions: https://docs.github.com/actions/reference/authentication-in-a-workflow
+- Workflow artifacts: https://docs.github.com/en/actions/tutorials/store-and-share-data
+
+Design influence: implemented tag-driven release archives with the preinstalled GitHub CLI, scoped workflow permissions, artifact passing between jobs, and checksum publication without adding third-party release actions.

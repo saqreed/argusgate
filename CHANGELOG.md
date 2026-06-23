@@ -2,6 +2,20 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## 0.1.5 - 2026-06-23
+
+### Added
+
+- Added a tag-driven GitHub Release workflow that builds Linux, macOS, and Windows archives for `amd64` and `arm64`.
+- Added `SHA256SUMS.txt` generation for release asset verification.
+- Added release documentation for maintainers and users.
+
+### Changed
+
+- Documented installing ArgusGate from GitHub release archives before source builds.
+- Restricted CI workflow permissions to read-only repository contents.
+- Added `.gitattributes` for consistent line endings across Go, YAML, Markdown, and JSON files.
+
 ## 0.1.4 - 2026-06-17
 
 ### Fixed

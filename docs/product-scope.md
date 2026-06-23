@@ -15,6 +15,7 @@ The first useful version is a local, CLI-first scanner with policy validation an
 - Generate a structured JSON report with deterministic fields useful for automation.
 - Print a short human-readable terminal summary.
 - Support `--fail-on`, `--format text|json`, `--quiet`, and `--version` for release-ready CLI use.
+- Publish GitHub release archives and checksums for common Linux, macOS, and Windows targets.
 - Return CI-friendly exit codes:
   - `0`: no findings at or above the fail threshold
   - `1`: findings at or above the fail threshold

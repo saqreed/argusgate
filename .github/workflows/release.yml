@@ -1,0 +1,182 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Verify release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          source_version="$(sed -nE 's/^const Version = "([^"]+)"/\1/p' argusgate/scanner/scanner.go)"
+          if [ "$source_version" != "$tag_version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match scanner.Version $source_version" >&2
+            exit 1
+          fi
+          if ! grep -q "^## ${tag_version} - " CHANGELOG.md; then
+            echo "CHANGELOG.md is missing a section for $tag_version" >&2
+            exit 1
+          fi
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            archive: tar.gz
+          - goos: linux
+            goarch: arm64
+            archive: tar.gz
+          - goos: darwin
+            goarch: amd64
+            archive: tar.gz
+          - goos: darwin
+            goarch: arm64
+            archive: tar.gz
+          - goos: windows
+            goarch: amd64
+            archive: zip
+          - goos: windows
+            goarch: arm64
+            archive: zip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Build package
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.ref_name }}
+          ARCHIVE: ${{ matrix.archive }}
+        run: |
+          set -euo pipefail
+
+          package="argusgate_${VERSION}_${GOOS}_${GOARCH}"
+          binary="argusgate"
+          if [ "$GOOS" = "windows" ]; then
+            binary="argusgate.exe"
+          fi
+
+          workdir="$(mktemp -d)"
+          mkdir -p "dist" "$workdir/$package"
+
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$workdir/$package/$binary" ./cmd/argusgate
+          if [ "$GOOS" = "linux" ] && [ "$GOARCH" = "amd64" ]; then
+            "$workdir/$package/$binary" --version | grep -q "argusgate version ${VERSION#v}"
+          fi
+          cp README.md LICENSE CHANGELOG.md "$workdir/$package/"
+
+          if [ "$ARCHIVE" = "zip" ]; then
+            (cd "$workdir" && zip -qr "$GITHUB_WORKSPACE/dist/${package}.zip" "$package")
+          else
+            tar -C "$workdir" -czf "dist/${package}.tar.gz" "$package"
+          fi
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argusgate-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: release-input
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find release-input -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} release/ \;
+          asset_count="$(find release -type f \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l | tr -d ' ')"
+          if [ "$asset_count" -eq 0 ]; then
+            echo "no release assets found" >&2
+            exit 1
+          fi
+          (cd release && sha256sum argusgate_* | sort -k2 > SHA256SUMS.txt)
+          ls -la release
+
+      - name: Extract changelog notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          awk -v prefix="## ${version} - " '
+            /^## / {
+              if (found) {
+                exit
+              }
+              if (index($0, prefix) == 1) {
+                found = 1
+                next
+              }
+            }
+            found {
+              print
+            }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            printf 'See CHANGELOG.md for release notes.\n' > RELEASE_NOTES.md
+          fi
+
+      - name: Publish GitHub prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "ArgusGate $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --prerelease
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/* --title "ArgusGate $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --prerelease
+          fi

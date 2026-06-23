@@ -38,6 +38,10 @@ It does not execute commands from MCP configs. It does not connect to external s
 
 CLI output can be a text summary or JSON on stdout. JSON reports are generated from the same report model used for file output, so CI consumers receive the same fields regardless of output mode.
 
+## Release Pipeline
+
+The CI workflow runs tests, vet, and a Linux CLI build on pushes and pull requests. The release workflow runs on version tags, repeats test and vet checks, cross-compiles static CLI binaries for Linux, macOS, and Windows, packages release archives, generates `SHA256SUMS.txt`, and publishes a GitHub prerelease with the generated assets.
+
 ## Future Gateway Shape
 
 The policy and report packages are kept separate so a future MCP proxy can reuse them. A runtime gateway would add transport support, invocation argument checks, audit logging, and enforcement decisions. That gateway is not implemented in the MVP.

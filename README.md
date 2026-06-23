@@ -12,6 +12,30 @@ MCP servers can expose tools that read files, run commands, query databases, aut
 
 ArgusGate v0.1.x focuses on a small useful baseline: local offline scans, policy checks, readable terminal output, JSON reports, and CI-ready exit codes.
 
+## Install From Release
+
+Download the archive for your operating system and CPU from [GitHub Releases](https://github.com/saqreed/argusgate/releases).
+
+Release archives are published for Linux, macOS, and Windows on `amd64` and `arm64`. Each release also includes `SHA256SUMS.txt`.
+
+Linux or macOS:
+
+```bash
+tar -xzf argusgate_v0.1.5_linux_amd64.tar.gz
+cd argusgate_v0.1.5_linux_amd64
+./argusgate --version
+```
+
+Windows PowerShell:
+
+```powershell
+Expand-Archive .\argusgate_v0.1.5_windows_amd64.zip
+cd .\argusgate_v0.1.5_windows_amd64\argusgate_v0.1.5_windows_amd64
+.\argusgate.exe --version
+```
+
+See [docs/release.md](docs/release.md) for checksum verification and maintainer release notes.
+
 ## Install From Source
 
 Requirements:
@@ -21,6 +45,13 @@ Requirements:
 ```bash
 mkdir -p bin
 go build -o ./bin/argusgate ./cmd/argusgate
+```
+
+Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force bin | Out-Null
+go build -o .\bin\argusgate.exe .\cmd\argusgate
 ```
 
 During development:
@@ -145,7 +176,7 @@ Example shape:
 ```json
 {
   "scanned_at": "2026-05-22T12:00:00Z",
-  "argusgate_version": "0.1.4",
+  "argusgate_version": "0.1.5",
   "source_type": "fixtures",
   "source_path": "examples/fixtures/malicious-tools.yaml",
   "servers": [],

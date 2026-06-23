@@ -13,7 +13,7 @@ import (
 func TestBuildSortsFindingsAndRedactsEvidence(t *testing.T) {
 	r := Build(Input{
 		ScannedAt:  time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
-		Version:    "0.1.4",
+		Version:    "0.1.5",
 		SourceType: "fixtures",
 		SourcePath: "fixture.yaml",
 		Servers: []mcp.ServerConfig{{
@@ -53,7 +53,7 @@ func TestBuildRedactsSecretLikeIdentifiersAndSummaries(t *testing.T) {
 	secret := "FAKE_TOKEN_DO_NOT_USE_1234567890"
 	r := Build(Input{
 		ScannedAt:  time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
-		Version:    "0.1.4",
+		Version:    "0.1.5",
 		SourceType: "fixtures",
 		SourcePath: "fixture.yaml",
 		Servers: []mcp.ServerConfig{{
@@ -91,7 +91,7 @@ func TestBuildRedactsSecretLikeIdentifiersAndSummaries(t *testing.T) {
 }
 
 func TestJSONBytesProducesReportJSON(t *testing.T) {
-	data, err := JSONBytes(Report{ArgusGateVersion: "0.1.4"})
+	data, err := JSONBytes(Report{ArgusGateVersion: "0.1.5"})
 	if err != nil {
 		t.Fatalf("JSONBytes failed: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestJSONBytesProducesReportJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if decoded.ArgusGateVersion != "0.1.4" {
+	if decoded.ArgusGateVersion != "0.1.5" {
 		t.Fatalf("unexpected version: %s", decoded.ArgusGateVersion)
 	}
 }
