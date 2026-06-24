@@ -22,6 +22,10 @@ var redactors = []rule{
 	{regexp.MustCompile(`\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b`), `[REDACTED_SECRET]`},
 	{regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`), `[REDACTED_SECRET]`},
 	{regexp.MustCompile(`\bsk-[A-Za-z0-9][A-Za-z0-9_-]{16,}\b`), `[REDACTED_SECRET]`},
+	{regexp.MustCompile(`\bxox[baprs]-[A-Za-z0-9-]{20,}\b`), `[REDACTED_SECRET]`},
+	{regexp.MustCompile(`\bnpm_[A-Za-z0-9_-]{20,}\b`), `[REDACTED_SECRET]`},
+	{regexp.MustCompile(`\bpypi-[A-Za-z0-9_-]{20,}\b`), `[REDACTED_SECRET]`},
+	{regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{20,}\b`), `[REDACTED_SECRET]`},
 }
 
 func Text(value string) string {

@@ -24,7 +24,7 @@ func TestRunHelpAndVersion(t *testing.T) {
 	if code := Run([]string{"--version"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("version exit code = %d, stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "argusgate version 0.1.5") {
+	if !strings.Contains(stdout.String(), "argusgate version 0.2.0") {
 		t.Fatalf("unexpected version output: %s", stdout.String())
 	}
 }
@@ -81,6 +81,36 @@ func TestFormatJSONAndQuiet(t *testing.T) {
 	}
 	if decoded["source_type"] != "fixtures" {
 		t.Fatalf("unexpected source_type: %#v", decoded["source_type"])
+	}
+}
+
+func TestFormatSARIFAndSARIFFile(t *testing.T) {
+	sarifPath := filepath.Join(t.TempDir(), "argusgate.sarif")
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"fixtures", "scan",
+		"--path", repoPath(t, "examples", "fixtures", "malicious-tools.yaml"),
+		"--policy", repoPath(t, "examples", "policies", "default.yaml"),
+		"--format", "sarif",
+		"--sarif", sarifPath,
+	}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("sarif scan exit code = %d, stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var stdoutSARIF map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &stdoutSARIF); err != nil {
+		t.Fatalf("stdout is not SARIF JSON: %v\n%s", err, stdout.String())
+	}
+	if stdoutSARIF["version"] != "2.1.0" {
+		t.Fatalf("unexpected stdout SARIF version: %#v", stdoutSARIF["version"])
+	}
+	data, err := os.ReadFile(sarifPath)
+	if err != nil {
+		t.Fatalf("SARIF file not written: %v", err)
+	}
+	var fileSARIF map[string]any
+	if err := json.Unmarshal(data, &fileSARIF); err != nil {
+		t.Fatalf("SARIF file is not JSON: %v\n%s", err, string(data))
 	}
 }
 

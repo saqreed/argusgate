@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/saqreed/argusgate/argusgate/mcp"
 	"github.com/saqreed/argusgate/argusgate/report"
@@ -164,6 +165,123 @@ defaults:
 	}
 	if p.Defaults.FailOn != severity.High {
 		t.Fatalf("expected fail_on high, got %s", p.Defaults.FailOn)
+	}
+}
+
+func TestLoadFileParsesV02Suppressions(t *testing.T) {
+	path := writePolicy(t, `
+version: "0.2"
+rules:
+  suppressions:
+    - fingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      reason: "accepted local fixture risk"
+      expires: "2026-12-31"
+`)
+
+	p, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile failed: %v", err)
+	}
+	if p.Version != "0.2" {
+		t.Fatalf("unexpected version: %s", p.Version)
+	}
+	if len(p.Rules.Suppressions) != 1 {
+		t.Fatalf("expected one suppression, got %#v", p.Rules.Suppressions)
+	}
+	if p.Rules.Suppressions[0].Reason != "accepted local fixture risk" {
+		t.Fatalf("unexpected suppression reason: %#v", p.Rules.Suppressions[0])
+	}
+}
+
+func TestLoadFileRejectsInvalidSuppressions(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{
+			name: "missing reason",
+			content: `
+version: "0.2"
+rules:
+  suppressions:
+    - fingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+`,
+		},
+		{
+			name: "bad expiry",
+			content: `
+version: "0.2"
+rules:
+  suppressions:
+    - fingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      reason: "accepted local fixture risk"
+      expires: "31-12-2026"
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := LoadFile(writePolicy(t, tc.content)); err == nil {
+				t.Fatal("expected invalid suppression error")
+			}
+		})
+	}
+}
+
+func TestApplySuppressionsMarksMatchingFindings(t *testing.T) {
+	p := Default()
+	p.Version = "0.2"
+	p.Rules.Suppressions = []Suppression{{
+		Fingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		Reason:      "accepted local fixture risk",
+		Expires:     "2026-12-31",
+	}}
+
+	findings := []report.Finding{{
+		ID:          "AG-TP001",
+		Severity:    severity.High,
+		Fingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	}}
+
+	out := ApplySuppressions(p, findings, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	if len(out) != 1 {
+		t.Fatalf("unexpected findings: %#v", out)
+	}
+	if !out[0].Suppressed || out[0].SuppressionReason != "accepted local fixture risk" {
+		t.Fatalf("finding was not suppressed: %#v", out[0])
+	}
+
+	decision := DecideExit(p, out)
+	if decision.ExitCode != 0 || decision.FindingsAtOrAbove != 0 {
+		t.Fatalf("suppressed finding should not fail exit decision: %#v", decision)
+	}
+}
+
+func TestApplySuppressionsReportsExpiredSuppressions(t *testing.T) {
+	p := Default()
+	p.Version = "0.2"
+	p.Rules.Suppressions = []Suppression{{
+		Fingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		Reason:      "accepted local fixture risk",
+		Expires:     "2026-01-01",
+	}}
+
+	findings := []report.Finding{{
+		ID:          "AG-TP001",
+		Severity:    severity.High,
+		Fingerprint: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	}}
+
+	out := ApplySuppressions(p, findings, time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC))
+	if len(out) != 2 {
+		t.Fatalf("expected original finding plus policy finding, got %#v", out)
+	}
+	if out[0].Suppressed {
+		t.Fatalf("expired suppression should not suppress original finding: %#v", out[0])
+	}
+	if !hasFinding(out, "AG-POL006") {
+		t.Fatalf("expected expired suppression policy finding: %#v", out)
 	}
 }
 

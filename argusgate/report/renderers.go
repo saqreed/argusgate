@@ -16,7 +16,10 @@ func WriteTerminalSummary(w io.Writer, r Report) {
 	fmt.Fprintf(w, "Source: %s (%s)\n", r.SourcePath, r.SourceType)
 	fmt.Fprintf(w, "Servers: %d\n", len(r.Servers))
 	fmt.Fprintf(w, "Tools: %d\n", len(r.Tools))
-	fmt.Fprintf(w, "Findings: %d\n", len(r.Findings))
+	fmt.Fprintf(w, "Findings: %d\n", countUnsuppressed(r.Findings))
+	if suppressed := countSuppressed(r.Findings); suppressed > 0 {
+		fmt.Fprintf(w, "Suppressed: %d\n", suppressed)
+	}
 	fmt.Fprintf(w, "Severity: critical=%d high=%d medium=%d low=%d info=%d\n",
 		r.SeveritySummary["critical"],
 		r.SeveritySummary["high"],
@@ -31,9 +34,14 @@ func WriteTerminalSummary(w io.Writer, r Report) {
 		}
 		fmt.Fprintf(w, "Exit: %s (code=%d, %s)\n", status, exitCode, reason)
 	}
-	for i, finding := range r.Findings {
-		if i >= 5 {
-			fmt.Fprintf(w, "... and %d more findings\n", len(r.Findings)-i)
+	shown := 0
+	totalUnsuppressed := countUnsuppressed(r.Findings)
+	for _, finding := range r.Findings {
+		if finding.Suppressed {
+			continue
+		}
+		if shown >= 5 {
+			fmt.Fprintf(w, "... and %d more findings\n", totalUnsuppressed-shown)
 			break
 		}
 		fmt.Fprintf(w, "- [%s] %s (%s", finding.Severity, finding.Title, finding.ID)
@@ -44,7 +52,22 @@ func WriteTerminalSummary(w io.Writer, r Report) {
 			fmt.Fprintf(w, " tool=%s", finding.ToolName)
 		}
 		fmt.Fprintln(w, ")")
+		shown++
 	}
+}
+
+func countSuppressed(findings []Finding) int {
+	count := 0
+	for _, finding := range findings {
+		if finding.Suppressed {
+			count++
+		}
+	}
+	return count
+}
+
+func countUnsuppressed(findings []Finding) int {
+	return len(findings) - countSuppressed(findings)
 }
 
 func exitDecisionText(value any) (int, string, bool) {

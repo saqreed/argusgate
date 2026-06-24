@@ -47,6 +47,82 @@ func TestBuildSortsFindingsAndRedactsEvidence(t *testing.T) {
 	if strings.Contains(r.Servers[0].URL, "SUPER_SECRET_PASSWORD") || strings.Contains(r.Servers[0].URL, "FAKE_TOKEN_DO_NOT_USE_1234567890") {
 		t.Fatalf("secret leaked in server URL summary: %s", r.Servers[0].URL)
 	}
+	if r.Findings[0].Fingerprint == "" {
+		t.Fatalf("expected stable finding fingerprint: %#v", r.Findings[0])
+	}
+}
+
+func TestBuildCreatesStableFingerprintsFromRedactedEvidence(t *testing.T) {
+	secret := "FAKE_TOKEN_DO_NOT_USE_1234567890"
+	input := Input{
+		ScannedAt:  time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC),
+		Version:    "0.2.0",
+		SourceType: "fixtures",
+		SourcePath: "fixture.yaml",
+		Findings: []Finding{{
+			ID:          "AG-SE001",
+			Severity:    severity.High,
+			Category:    "secret-exposure",
+			ServerID:    "s1",
+			ToolName:    "token_loader",
+			Location:    "tools[token_loader].description",
+			Evidence:    "Bearer " + secret,
+			Explanation: "test finding",
+			Confidence:  "high",
+		}},
+		RedactFindingText: true,
+	}
+
+	first := Build(input)
+	second := Build(input)
+	if first.Findings[0].Fingerprint == "" {
+		t.Fatal("expected non-empty fingerprint")
+	}
+	if first.Findings[0].Fingerprint != second.Findings[0].Fingerprint {
+		t.Fatalf("fingerprint should be stable: %s != %s", first.Findings[0].Fingerprint, second.Findings[0].Fingerprint)
+	}
+	if strings.Contains(first.Findings[0].Fingerprint, secret) {
+		t.Fatalf("fingerprint must not contain raw secret: %s", first.Findings[0].Fingerprint)
+	}
+}
+
+func TestSARIFBytesProducesSARIFReport(t *testing.T) {
+	r := Report{
+		ArgusGateVersion: "0.2.0",
+		SourcePath:       "fixtures.yaml",
+		Findings: []Finding{{
+			ID:              "AG-TP001",
+			Title:           "Suspicious tool instruction detected",
+			Severity:        severity.High,
+			Category:        "tool-poisoning",
+			OWASPMCPMapping: "MCP03 Tool Poisoning",
+			ServerID:        "s1",
+			ToolName:        "search",
+			Location:        "tools[search].description",
+			Fingerprint:     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			Explanation:     "test finding",
+			Recommendation:  "review",
+			Confidence:      "high",
+		}},
+	}
+
+	data, err := SARIFBytes(r)
+	if err != nil {
+		t.Fatalf("SARIFBytes failed: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("invalid SARIF JSON: %v\n%s", err, string(data))
+	}
+	if decoded["version"] != "2.1.0" {
+		t.Fatalf("unexpected SARIF version: %#v", decoded["version"])
+	}
+	runs := decoded["runs"].([]any)
+	results := runs[0].(map[string]any)["results"].([]any)
+	result := results[0].(map[string]any)
+	if result["ruleId"] != "AG-TP001" || result["level"] != "error" {
+		t.Fatalf("unexpected SARIF result: %#v", result)
+	}
 }
 
 func TestBuildRedactsSecretLikeIdentifiersAndSummaries(t *testing.T) {

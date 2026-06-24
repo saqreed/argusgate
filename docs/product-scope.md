@@ -12,9 +12,10 @@ The first useful version is a local, CLI-first scanner with policy validation an
 - Parse local MCP tool fixture files in JSON or YAML.
 - Validate a small YAML policy format.
 - Detect tool-poisoning indicators, secret exposure, dangerous capabilities, sensitive paths, SQL write risks, and policy violations.
-- Generate a structured JSON report with deterministic fields useful for automation.
+- Generate structured JSON and SARIF reports with deterministic fields useful for automation.
 - Print a short human-readable terminal summary.
-- Support `--fail-on`, `--format text|json`, `--quiet`, and `--version` for release-ready CLI use.
+- Support `--fail-on`, `--format text|json|sarif`, `--sarif`, `--quiet`, and `--version` for release-ready CLI use.
+- Support reviewed finding suppressions by stable fingerprint in policy `version: "0.2"`.
 - Publish GitHub release archives and checksums for common Linux, macOS, and Windows targets.
 - Return CI-friendly exit codes:
   - `0`: no findings at or above the fail threshold

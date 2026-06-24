@@ -24,6 +24,7 @@ coverage/
 /safe-report.json
 /malicious-report.json
 /config-report.json
+/*.sarif
 
 # Local environment and secrets
 .env

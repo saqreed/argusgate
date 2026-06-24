@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/saqreed/argusgate/docs/schemas/report.schema.json",
+  "title": "ArgusGate Report",
+  "type": "object",
+  "required": [
+    "scanned_at",
+    "argusgate_version",
+    "source_type",
+    "source_path",
+    "servers",
+    "tools",
+    "findings",
+    "severity_summary",
+    "policy_summary",
+    "exit_decision"
+  ],
+  "properties": {
+    "scanned_at": { "type": "string", "format": "date-time" },
+    "argusgate_version": { "type": "string" },
+    "source_type": { "type": "string", "enum": ["config", "fixtures"] },
+    "source_path": { "type": "string" },
+    "servers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/server" }
+    },
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool" }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "severity_summary": {
+      "type": "object",
+      "required": ["critical", "high", "medium", "low", "info"],
+      "properties": {
+        "critical": { "type": "integer", "minimum": 0 },
+        "high": { "type": "integer", "minimum": 0 },
+        "medium": { "type": "integer", "minimum": 0 },
+        "low": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "policy_summary": { "type": "object" },
+    "exit_decision": { "type": "object" }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["info", "low", "medium", "high", "critical"]
+    },
+    "server": {
+      "type": "object",
+      "required": ["id", "tool_count"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "transport": { "type": "string" },
+        "command": { "type": "string" },
+        "url": { "type": "string" },
+        "tool_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "tool": {
+      "type": "object",
+      "required": ["server_id", "name"],
+      "properties": {
+        "server_id": { "type": "string" },
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "description_excerpt": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "severity",
+        "category",
+        "explanation",
+        "confidence"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "category": { "type": "string" },
+        "owasp_mcp_mapping": { "type": "string" },
+        "server_id": { "type": "string" },
+        "tool_name": { "type": "string" },
+        "location": { "type": "string" },
+        "evidence": { "type": "string" },
+        "explanation": { "type": "string" },
+        "recommendation": { "type": "string" },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+        "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "suppressed": { "type": "boolean" },
+        "suppression_reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

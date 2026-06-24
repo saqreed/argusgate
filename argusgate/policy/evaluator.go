@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/saqreed/argusgate/argusgate/internal/redact"
 	"github.com/saqreed/argusgate/argusgate/mcp"
@@ -41,6 +42,9 @@ func DecideExit(p Policy, findings []report.Finding) ExitDecision {
 	highest := severity.Info
 	count := 0
 	for _, finding := range findings {
+		if finding.Suppressed {
+			continue
+		}
 		if finding.Severity.AtLeast(highest) {
 			highest = finding.Severity
 		}
@@ -55,7 +59,7 @@ func DecideExit(p Policy, findings []report.Finding) ExitDecision {
 			FailOn:            failOn,
 			HighestSeverity:   highest,
 			FindingsAtOrAbove: count,
-			Reason:            fmt.Sprintf("%d finding(s) at or above %s", count, failOn),
+			Reason:            fmt.Sprintf("%d unsuppressed finding(s) at or above %s", count, failOn),
 		}
 	}
 	return ExitDecision{
@@ -63,7 +67,69 @@ func DecideExit(p Policy, findings []report.Finding) ExitDecision {
 		FailOn:            failOn,
 		HighestSeverity:   highest,
 		FindingsAtOrAbove: 0,
-		Reason:            fmt.Sprintf("no findings at or above %s", failOn),
+		Reason:            fmt.Sprintf("no unsuppressed findings at or above %s", failOn),
+	}
+}
+
+func ApplySuppressions(p Policy, findings []report.Finding, now time.Time) []report.Finding {
+	if len(p.Rules.Suppressions) == 0 {
+		out := make([]report.Finding, len(findings))
+		copy(out, findings)
+		return out
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	active := map[string]string{}
+	expiredFindings := make([]report.Finding, 0)
+	for _, suppression := range p.Rules.Suppressions {
+		fingerprint := strings.ToLower(strings.TrimSpace(suppression.Fingerprint))
+		reason := strings.TrimSpace(suppression.Reason)
+		if suppressionExpired(suppression, now) {
+			expiredFindings = append(expiredFindings, expiredSuppressionFinding(fingerprint, reason, suppression.Expires))
+			continue
+		}
+		active[fingerprint] = reason
+	}
+
+	out := make([]report.Finding, 0, len(findings)+len(expiredFindings))
+	for _, finding := range findings {
+		if reason, ok := active[strings.ToLower(strings.TrimSpace(finding.Fingerprint))]; ok && finding.Fingerprint != "" {
+			finding.Suppressed = true
+			finding.SuppressionReason = reason
+		}
+		out = append(out, finding)
+	}
+	out = append(out, expiredFindings...)
+	return out
+}
+
+func suppressionExpired(s Suppression, now time.Time) bool {
+	if strings.TrimSpace(s.Expires) == "" {
+		return false
+	}
+	expires, err := time.Parse(time.DateOnly, s.Expires)
+	if err != nil {
+		return true
+	}
+	cutoff := time.Date(expires.Year(), expires.Month(), expires.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), time.UTC)
+	return now.UTC().After(cutoff)
+}
+
+func expiredSuppressionFinding(fingerprint, reason, expires string) report.Finding {
+	return report.Finding{
+		ID:                "AG-POL006",
+		Title:             "Policy suppression has expired",
+		Severity:          severity.Medium,
+		Category:          "policy-violation",
+		OWASPMCPMapping:   "MCP02 Scope Creep / Excessive Permissions",
+		Location:          "policy.rules.suppressions",
+		Evidence:          redact.Snippet(fingerprint, 120),
+		Explanation:       fmt.Sprintf("A suppression expired on %s and was not applied.", expires),
+		Recommendation:    "Remove expired suppressions or renew them only after reviewing the finding again.",
+		Confidence:        "high",
+		SuppressionReason: reason,
 	}
 }
 

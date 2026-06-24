@@ -1,7 +1,10 @@
 package report
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/saqreed/argusgate/argusgate/internal/redact"
@@ -10,18 +13,21 @@ import (
 )
 
 type Finding struct {
-	ID              string         `json:"id"`
-	Title           string         `json:"title"`
-	Severity        severity.Level `json:"severity"`
-	Category        string         `json:"category"`
-	OWASPMCPMapping string         `json:"owasp_mcp_mapping,omitempty"`
-	ServerID        string         `json:"server_id,omitempty"`
-	ToolName        string         `json:"tool_name,omitempty"`
-	Location        string         `json:"location,omitempty"`
-	Evidence        string         `json:"evidence,omitempty"`
-	Explanation     string         `json:"explanation"`
-	Recommendation  string         `json:"recommendation,omitempty"`
-	Confidence      string         `json:"confidence"`
+	ID                string         `json:"id"`
+	Title             string         `json:"title"`
+	Severity          severity.Level `json:"severity"`
+	Category          string         `json:"category"`
+	OWASPMCPMapping   string         `json:"owasp_mcp_mapping,omitempty"`
+	ServerID          string         `json:"server_id,omitempty"`
+	ToolName          string         `json:"tool_name,omitempty"`
+	Location          string         `json:"location,omitempty"`
+	Evidence          string         `json:"evidence,omitempty"`
+	Explanation       string         `json:"explanation"`
+	Recommendation    string         `json:"recommendation,omitempty"`
+	Confidence        string         `json:"confidence"`
+	Fingerprint       string         `json:"fingerprint,omitempty"`
+	Suppressed        bool           `json:"suppressed,omitempty"`
+	SuppressionReason string         `json:"suppression_reason,omitempty"`
 }
 
 type ServerSummary struct {
@@ -81,6 +87,9 @@ func Build(input Input) Report {
 			findings[i].Location = redact.Text(findings[i].Location)
 			findings[i].Evidence = redact.Text(findings[i].Evidence)
 		}
+		if findings[i].Fingerprint == "" {
+			findings[i].Fingerprint = Fingerprint(findings[i])
+		}
 	}
 	sortFindings(findings)
 
@@ -96,6 +105,35 @@ func Build(input Input) Report {
 		PolicySummary:    input.PolicySummary,
 		ExitDecision:     input.ExitDecision,
 	}
+}
+
+func EnsureFingerprints(findings []Finding) []Finding {
+	out := make([]Finding, len(findings))
+	copy(out, findings)
+	for i := range out {
+		if out[i].Fingerprint == "" {
+			out[i].Fingerprint = Fingerprint(out[i])
+		}
+	}
+	return out
+}
+
+func Fingerprint(f Finding) string {
+	parts := []string{
+		normalizeFingerprintPart(f.ID),
+		normalizeFingerprintPart(f.Category),
+		normalizeFingerprintPart(f.ServerID),
+		normalizeFingerprintPart(f.ToolName),
+		normalizeFingerprintPart(f.Location),
+		normalizeFingerprintPart(f.Evidence),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func normalizeFingerprintPart(value string) string {
+	redacted := redact.Text(value)
+	return strings.ToLower(strings.Join(strings.Fields(redacted), " "))
 }
 
 func summarizeServers(servers []mcp.ServerConfig) []ServerSummary {
@@ -139,6 +177,9 @@ func summarizeSeverities(findings []Finding) map[string]int {
 		summary[level.String()] = 0
 	}
 	for _, finding := range findings {
+		if finding.Suppressed {
+			continue
+		}
 		summary[finding.Severity.String()]++
 	}
 	return summary
@@ -158,6 +199,9 @@ func sortFindings(findings []Finding) {
 		if findings[i].ID != findings[j].ID {
 			return findings[i].ID < findings[j].ID
 		}
-		return findings[i].Location < findings[j].Location
+		if findings[i].Location != findings[j].Location {
+			return findings[i].Location < findings[j].Location
+		}
+		return findings[i].Fingerprint < findings[j].Fingerprint
 	})
 }

@@ -2,6 +2,28 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## 0.2.0 - 2026-06-24
+
+### Added
+
+- Added stable SHA-256 finding fingerprints to JSON reports for repeat scans and policy suppressions.
+- Added policy `version: "0.2"` suppressions by finding fingerprint with required reasons and optional expiry dates.
+- Added SARIF 2.1.0 output through `--format sarif` and `--sarif <path>` for GitHub Code Scanning workflows.
+- Added JSON schemas for ArgusGate reports and policies under `docs/schemas/`.
+- Added detector rule metadata and expanded v0.2 risk catalog fixtures.
+- Added detector coverage for invisible metadata characters, Slack/npm/PyPI/Google API token-like values, cloud CLIs, infrastructure-as-code tools, and package-manager execution.
+
+### Changed
+
+- Split scanner detectors into focused files by detector family.
+- Updated terminal summaries and exit decisions to count unsuppressed findings separately from suppressed findings.
+- Updated README and policy documentation for suppressions, SARIF output, schemas, and v0.2 limitations.
+
+### Fixed
+
+- Reduced false positives for descriptions that explicitly say they do not execute shell commands.
+- Kept suppressed findings visible in JSON reports while excluding them from CI fail decisions and SARIF results.
+
 ## 0.1.5 - 2026-06-23
 
 ### Added

@@ -69,9 +69,70 @@ func TestReportJSONRoundTrip(t *testing.T) {
 	}
 }
 
+func TestScanReportIncludesFingerprints(t *testing.T) {
+	p, err := policy.LoadFile(repoPath(t, "examples", "policies", "default.yaml"))
+	if err != nil {
+		t.Fatalf("LoadFile failed: %v", err)
+	}
+	r, err := ScanFixtures(repoPath(t, "examples", "fixtures", "malicious-tools.yaml"), p)
+	if err != nil {
+		t.Fatalf("ScanFixtures failed: %v", err)
+	}
+	if len(r.Findings) == 0 {
+		t.Fatal("expected findings")
+	}
+	for _, finding := range r.Findings {
+		if finding.Fingerprint == "" {
+			t.Fatalf("finding missing fingerprint: %#v", finding)
+		}
+	}
+}
+
+func TestScanAppliesPolicySuppressionsToExitDecision(t *testing.T) {
+	docPath := repoPath(t, "examples", "fixtures", "malicious-tools.yaml")
+	base, err := ScanFixtures(docPath, policy.Default())
+	if err != nil {
+		t.Fatalf("ScanFixtures failed: %v", err)
+	}
+	var target string
+	for _, finding := range base.Findings {
+		if finding.Severity.AtLeast(severity.High) {
+			target = finding.Fingerprint
+			break
+		}
+	}
+	if target == "" {
+		t.Fatalf("expected high finding fingerprint: %#v", base.Findings)
+	}
+
+	p := policy.Default()
+	p.Version = "0.2"
+	p.Rules.Suppressions = []policy.Suppression{{
+		Fingerprint: target,
+		Reason:      "accepted fixture risk",
+		Expires:     "2099-12-31",
+	}}
+	r, err := ScanFixtures(docPath, p)
+	if err != nil {
+		t.Fatalf("ScanFixtures failed: %v", err)
+	}
+	if !hasSuppressedFinding(r, target) {
+		t.Fatalf("expected suppressed finding %s, got %#v", target, r.Findings)
+	}
+}
+
 func reportHasFinding(r report.Report, id string) bool {
 	for _, finding := range r.Findings {
 		if finding.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSuppressedFinding(r report.Report, fingerprint string) bool {
+	for _, finding := range r.Findings {
+		if finding.Fingerprint == fingerprint && finding.Suppressed {
 			return true
 		}
 	}

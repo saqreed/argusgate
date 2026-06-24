@@ -22,15 +22,22 @@ type Defaults struct {
 }
 
 type Rules struct {
-	AllowTools   []string  `json:"allow_tools,omitempty" yaml:"allow_tools,omitempty"`
-	DenyTools    []string  `json:"deny_tools,omitempty" yaml:"deny_tools,omitempty"`
-	DenyKeywords []string  `json:"deny_keywords,omitempty" yaml:"deny_keywords,omitempty"`
-	Paths        PathRules `json:"paths,omitempty" yaml:"paths,omitempty"`
+	AllowTools   []string      `json:"allow_tools,omitempty" yaml:"allow_tools,omitempty"`
+	DenyTools    []string      `json:"deny_tools,omitempty" yaml:"deny_tools,omitempty"`
+	DenyKeywords []string      `json:"deny_keywords,omitempty" yaml:"deny_keywords,omitempty"`
+	Paths        PathRules     `json:"paths,omitempty" yaml:"paths,omitempty"`
+	Suppressions []Suppression `json:"suppressions,omitempty" yaml:"suppressions,omitempty"`
 }
 
 type PathRules struct {
 	Deny  []string `json:"deny,omitempty" yaml:"deny,omitempty"`
 	Allow []string `json:"allow,omitempty" yaml:"allow,omitempty"`
+}
+
+type Suppression struct {
+	Fingerprint string `json:"fingerprint" yaml:"fingerprint"`
+	Reason      string `json:"reason" yaml:"reason"`
+	Expires     string `json:"expires,omitempty" yaml:"expires,omitempty"`
 }
 
 type ServerRule struct {
@@ -47,6 +54,7 @@ type Summary struct {
 	DeniedKeywords    int            `json:"denied_keywords"`
 	DeniedPaths       int            `json:"denied_paths"`
 	AllowedPaths      int            `json:"allowed_paths"`
+	Suppressions      int            `json:"suppressions"`
 	ServerRules       int            `json:"server_rules"`
 }
 
@@ -79,6 +87,7 @@ func Summarize(p Policy) Summary {
 		DeniedKeywords:    len(p.Rules.DenyKeywords),
 		DeniedPaths:       len(p.Rules.Paths.Deny),
 		AllowedPaths:      len(p.Rules.Paths.Allow),
+		Suppressions:      len(p.Rules.Suppressions),
 		ServerRules:       len(p.Servers),
 	}
 }

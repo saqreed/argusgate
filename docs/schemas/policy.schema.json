@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/saqreed/argusgate/docs/schemas/policy.schema.json",
+  "title": "ArgusGate Policy",
+  "type": "object",
+  "required": ["version"],
+  "properties": {
+    "version": { "type": "string", "enum": ["0.1", "0.2"] },
+    "project": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "fail_on": { "$ref": "#/$defs/severity" },
+        "allowed_severity": { "$ref": "#/$defs/severity" },
+        "allow_unknown_tools": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "rules": {
+      "type": "object",
+      "properties": {
+        "allow_tools": { "$ref": "#/$defs/stringList" },
+        "deny_tools": { "$ref": "#/$defs/stringList" },
+        "deny_keywords": { "$ref": "#/$defs/stringList" },
+        "paths": {
+          "type": "object",
+          "properties": {
+            "deny": { "$ref": "#/$defs/stringList" },
+            "allow": { "$ref": "#/$defs/stringList" }
+          },
+          "additionalProperties": false
+        },
+        "suppressions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/suppression" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "servers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "allow_tools": { "$ref": "#/$defs/stringList" },
+          "deny_tools": { "$ref": "#/$defs/stringList" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["info", "low", "medium", "high", "critical"]
+    },
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "suppression": {
+      "type": "object",
+      "required": ["fingerprint", "reason"],
+      "properties": {
+        "fingerprint": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "reason": { "type": "string", "minLength": 1 },
+        "expires": { "type": "string", "format": "date" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

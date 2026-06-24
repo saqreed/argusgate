@@ -10,7 +10,7 @@ ArgusGate is experimental. It performs heuristic static analysis. It is not a co
 
 MCP servers can expose tools that read files, run commands, query databases, automate browsers, call APIs, and operate infrastructure. A malicious or compromised server can also hide instructions in tool descriptions or leak secrets through config and metadata.
 
-ArgusGate v0.1.x focuses on a small useful baseline: local offline scans, policy checks, readable terminal output, JSON reports, and CI-ready exit codes.
+ArgusGate v0.2.0 focuses on a stronger CLI-first scanner: local offline scans, policy checks, controlled suppressions, stable finding fingerprints, JSON reports, SARIF output, and CI-ready exit codes.
 
 ## Install From Release
 
@@ -21,16 +21,16 @@ Release archives are published for Linux, macOS, and Windows on `amd64` and `arm
 Linux or macOS:
 
 ```bash
-tar -xzf argusgate_v0.1.5_linux_amd64.tar.gz
-cd argusgate_v0.1.5_linux_amd64
+tar -xzf argusgate_v0.2.0_linux_amd64.tar.gz
+cd argusgate_v0.2.0_linux_amd64
 ./argusgate --version
 ```
 
 Windows PowerShell:
 
 ```powershell
-Expand-Archive .\argusgate_v0.1.5_windows_amd64.zip
-cd .\argusgate_v0.1.5_windows_amd64\argusgate_v0.1.5_windows_amd64
+Expand-Archive .\argusgate_v0.2.0_windows_amd64.zip
+cd .\argusgate_v0.2.0_windows_amd64\argusgate_v0.2.0_windows_amd64
 .\argusgate.exe --version
 ```
 
@@ -82,10 +82,26 @@ go run ./cmd/argusgate fixtures scan --path examples/fixtures/malicious-tools.ya
 
 The malicious fixture is expected to exit `1` because it contains high-severity findings.
 
+Write JSON and SARIF reports:
+
+```bash
+go run ./cmd/argusgate fixtures scan \
+  --path examples/fixtures/malicious-tools.yaml \
+  --policy examples/policies/default.yaml \
+  --report malicious-report.json \
+  --sarif malicious.sarif
+```
+
 Emit JSON to stdout:
 
 ```bash
 go run ./cmd/argusgate fixtures scan --path examples/fixtures/safe-tools.yaml --format json
+```
+
+Emit SARIF to stdout:
+
+```bash
+go run ./cmd/argusgate fixtures scan --path examples/fixtures/malicious-tools.yaml --format sarif
 ```
 
 Override the policy fail threshold:
@@ -105,9 +121,9 @@ go run ./cmd/argusgate scan --config examples/configs/mcp-config.yaml --policy e
 ```text
 argusgate --help
 argusgate --version
-argusgate scan --config <path> [--policy <path>] [--report <path>] [--fail-on high] [--format text|json] [--quiet]
+argusgate scan --config <path> [--policy <path>] [--report <path>] [--sarif <path>] [--fail-on high] [--format text|json|sarif] [--quiet]
 argusgate policy validate --policy <path>
-argusgate fixtures scan --path <path> [--policy <path>] [--report <path>] [--fail-on high] [--format text|json] [--quiet]
+argusgate fixtures scan --path <path> [--policy <path>] [--report <path>] [--sarif <path>] [--fail-on high] [--format text|json|sarif] [--quiet]
 ```
 
 Exit codes:
@@ -156,6 +172,19 @@ servers:
 
 Policy precedence is documented in [docs/policy-format.md](docs/policy-format.md).
 
+v0.2 policies can suppress reviewed findings by stable fingerprint:
+
+```yaml
+version: "0.2"
+rules:
+  suppressions:
+    - fingerprint: "0000000000000000000000000000000000000000000000000000000000000000"
+      reason: "accepted local fixture risk"
+      expires: "2099-12-31"
+```
+
+Suppressed findings remain visible in JSON reports with `suppressed: true`, but they do not affect the scan exit code.
+
 ## JSON Report
 
 Reports include:
@@ -176,7 +205,7 @@ Example shape:
 ```json
 {
   "scanned_at": "2026-05-22T12:00:00Z",
-  "argusgate_version": "0.1.5",
+  "argusgate_version": "0.2.0",
   "source_type": "fixtures",
   "source_path": "examples/fixtures/malicious-tools.yaml",
   "servers": [],
@@ -196,6 +225,40 @@ Example shape:
 
 Finding evidence is redacted when it looks secret-like.
 
+The report schema is available at [docs/schemas/report.schema.json](docs/schemas/report.schema.json). The policy schema is available at [docs/schemas/policy.schema.json](docs/schemas/policy.schema.json).
+
+## SARIF And GitHub Code Scanning
+
+ArgusGate can write SARIF 2.1.0 for GitHub Code Scanning:
+
+```bash
+go run ./cmd/argusgate fixtures scan \
+  --path examples/fixtures/malicious-tools.yaml \
+  --policy examples/policies/default.yaml \
+  --sarif argusgate.sarif
+```
+
+Example GitHub Actions snippet:
+
+```yaml
+- name: Build ArgusGate
+  run: go build -o ./bin/argusgate ./cmd/argusgate
+
+- name: ArgusGate scan
+  run: |
+    ./bin/argusgate fixtures scan \
+      --path examples/fixtures/malicious-tools.yaml \
+      --policy examples/policies/default.yaml \
+      --report argusgate-report.json \
+      --sarif argusgate.sarif
+
+- name: Upload ArgusGate SARIF
+  if: always()
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: argusgate.sarif
+```
+
 ## CI Usage
 
 Example GitHub Actions step:
@@ -203,7 +266,7 @@ Example GitHub Actions step:
 ```yaml
 - name: ArgusGate fixture scan
   run: |
-    go run ./cmd/argusgate fixtures scan \
+go run ./cmd/argusgate fixtures scan \
       --path examples/fixtures/malicious-tools.yaml \
       --policy examples/policies/default.yaml \
       --report argusgate-report.json
@@ -223,12 +286,13 @@ mkdir -p bin && go build -o ./bin/argusgate ./cmd/argusgate
 - Findings can include false positives.
 - The scanner does not connect to live MCP servers.
 - The scanner does not execute tool commands or invoke MCP tools.
-- No runtime proxy/gateway is implemented in v0.1.x.
+- No runtime proxy/gateway is implemented in v0.2.0.
 - No database, web UI, OAuth/RBAC, Kubernetes deployment, or SaaS workflow is included.
 
 ## Roadmap
 
 - More fixture coverage and detector tuning.
+- Packaged reusable GitHub Action.
 - Tool pinning and rug-pull detection.
 - Optional live MCP metadata inspection.
 - Runtime MCP gateway/proxy after the scanner and policy engine stabilize.

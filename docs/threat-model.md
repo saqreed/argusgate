@@ -25,11 +25,11 @@
 
 ## Detector Heuristics
 
-The v0.1.x detectors are transparent static checks:
+The v0.2.0 detectors are transparent static checks:
 
-- Tool poisoning: suspicious instruction phrases, hidden markdown/HTML comments, and long base64-like payloads in tool metadata.
-- Secret exposure: bearer tokens, basic authorization values, URL userinfo credentials, key/value secret fields, JWT-like strings, connection strings, and private-key-shaped blocks.
-- Dangerous capability: shell execution, file read/write, network or browser automation, database writes, credential access, Docker, Kubernetes, and host system operations.
+- Tool poisoning: suspicious instruction phrases, hidden markdown/HTML comments, suspicious encoded payloads, and invisible metadata characters.
+- Secret exposure: bearer tokens, basic authorization values, URL userinfo credentials, key/value secret fields, JWT-like strings, connection strings, private-key-shaped blocks, and common ecosystem token shapes.
+- Dangerous capability: shell execution, file read/write, network or browser automation, database writes, credential access, Docker, Kubernetes, cloud CLI, infrastructure-as-code, package manager, and host system operations.
 - Sensitive path: references to SSH keys, `/etc/passwd`, `/etc/shadow`, `.env`, `kubeconfig`, cloud credential paths, token files, and browser profiles.
 - SQL risk: static signals for SQL read access and write/schema/command-capable SQL operations.
 

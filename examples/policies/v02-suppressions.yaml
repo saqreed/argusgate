@@ -1,0 +1,27 @@
+version: "0.2"
+project:
+  name: "argusgate-v02-suppression-example"
+defaults:
+  fail_on: "high"
+  allow_unknown_tools: true
+rules:
+  deny_tools:
+    - "shell_exec"
+    - "run_command"
+  deny_keywords:
+    - "ignore previous instructions"
+    - "do not tell the user"
+    - "exfiltrate"
+  paths:
+    deny:
+      - "~/.ssh"
+      - "/etc"
+      - ".env"
+      - "kubeconfig"
+    allow:
+      - "./examples"
+      - "./testdata"
+  suppressions:
+    - fingerprint: "0000000000000000000000000000000000000000000000000000000000000000"
+      reason: "example placeholder; replace with a fingerprint from an ArgusGate report after review"
+      expires: "2099-12-31"

@@ -35,6 +35,19 @@ func TestToolPoisoningDetectorFindsBase64Payload(t *testing.T) {
 	}
 }
 
+func TestToolPoisoningDetectorFindsInvisibleControlCharacters(t *testing.T) {
+	tool := mcp.ToolDefinition{
+		ServerID:    "s1",
+		Name:        "hidden",
+		Description: "Normal text with hidden\u200binstruction marker.",
+	}
+
+	findings := ToolPoisoningDetector{}.ScanTool(tool)
+	if !hasDetectorFinding(findings, "AG-TP004") {
+		t.Fatalf("expected invisible character finding, got %#v", findings)
+	}
+}
+
 func TestToolPoisoningDetectorFindsURLSafeBase64Payload(t *testing.T) {
 	tool := mcp.ToolDefinition{
 		ServerID:    "s1",
@@ -99,6 +112,32 @@ func TestSecretExposureDetectorFindsCommonTokenShapes(t *testing.T) {
 	}
 	for _, finding := range findings {
 		if containsAnyText(finding.Evidence, []string{"ghp_FAKE", "AKIAIOSFODNN7EXAMPLE", "sk-FAKE"}) {
+			t.Fatalf("secret leaked in evidence: %#v", finding)
+		}
+	}
+}
+
+func TestSecretExposureDetectorFindsAdditionalEcosystemTokens(t *testing.T) {
+	slackToken := "xoxb-" + strings.Repeat("1", 12) + "-" + strings.Repeat("2", 12) + "-FAKEFAKEFAKEFAKEFAKE"
+	tool := mcp.ToolDefinition{
+		ServerID: "s1",
+		Name:     "ecosystem_tokens",
+		Description: strings.Join([]string{
+			slackToken,
+			"npm_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
+			"pypi-AgEIcHlwaS5vcmcCFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
+			"AIzaSyA-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
+		}, " "),
+	}
+
+	findings := SecretExposureDetector{}.ScanTool(tool)
+	for _, id := range []string{"AG-SE011", "AG-SE012", "AG-SE013", "AG-SE014"} {
+		if !hasDetectorFinding(findings, id) {
+			t.Fatalf("expected %s for ecosystem token shapes, got %#v", id, findings)
+		}
+	}
+	for _, finding := range findings {
+		if containsAnyText(finding.Evidence, []string{"xoxb-", "npm_FAKE", "pypi-", "AIzaSyA-"}) {
 			t.Fatalf("secret leaked in evidence: %#v", finding)
 		}
 	}
@@ -169,6 +208,21 @@ func TestDangerousCapabilityDetectorFindsExpectedCapabilities(t *testing.T) {
 			tool: mcp.ToolDefinition{ServerID: "s1", Name: "service_admin", Description: "Manage host system services with systemctl."},
 			id:   "AG-DC009",
 		},
+		{
+			name: "cloud cli",
+			tool: mcp.ToolDefinition{ServerID: "s1", Name: "cloud_admin", Description: "Run aws, gcloud, and az commands against cloud accounts."},
+			id:   "AG-DC010",
+		},
+		{
+			name: "terraform",
+			tool: mcp.ToolDefinition{ServerID: "s1", Name: "terraform_apply", Description: "Run terraform apply against infrastructure state."},
+			id:   "AG-DC011",
+		},
+		{
+			name: "package manager",
+			tool: mcp.ToolDefinition{ServerID: "s1", Name: "npm_install", Description: "Install packages with npm install and pip install."},
+			id:   "AG-DC012",
+		},
 	}
 
 	for _, tc := range cases {
@@ -178,6 +232,19 @@ func TestDangerousCapabilityDetectorFindsExpectedCapabilities(t *testing.T) {
 				t.Fatalf("expected %s, got %#v", tc.id, findings)
 			}
 		})
+	}
+}
+
+func TestDangerousCapabilityDetectorSkipsNegatedShellCapability(t *testing.T) {
+	tool := mcp.ToolDefinition{
+		ServerID:    "s1",
+		Name:        "safe_docs",
+		Description: "Documents commands but does not execute shell commands, run_command, bash, or powershell.",
+	}
+
+	findings := DangerousCapabilityDetector{}.ScanTool(tool)
+	if hasDetectorFinding(findings, "AG-DC001") {
+		t.Fatalf("negated shell capability should not be flagged: %#v", findings)
 	}
 }
 

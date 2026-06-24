@@ -17,6 +17,7 @@ import (
 type scanOptions struct {
 	policyPath string
 	reportPath string
+	sarifPath  string
 	failOn     string
 	format     string
 	quiet      bool
@@ -138,8 +139,9 @@ func newScanOptions(fs *flag.FlagSet) *scanOptions {
 	opts := &scanOptions{}
 	fs.StringVar(&opts.policyPath, "policy", "", "path to policy YAML")
 	fs.StringVar(&opts.reportPath, "report", "", "path to write JSON report")
+	fs.StringVar(&opts.sarifPath, "sarif", "", "path to write SARIF 2.1.0 report")
 	fs.StringVar(&opts.failOn, "fail-on", "", "override policy fail_on: low, medium, high, or critical")
-	fs.StringVar(&opts.format, "format", "text", "stdout format: text or json")
+	fs.StringVar(&opts.format, "format", "text", "stdout format: text, json, or sarif")
 	fs.BoolVar(&opts.quiet, "quiet", false, "suppress text summary; errors still go to stderr")
 	return opts
 }
@@ -154,9 +156,9 @@ func loadPolicyOrDefault(path string) (policy.Policy, error) {
 func applyScanOptions(p *policy.Policy, opts scanOptions) error {
 	opts.format = normalizeFormat(opts.format)
 	switch opts.format {
-	case "", "text", "json":
+	case "", "text", "json", "sarif":
 	default:
-		return fmt.Errorf("invalid --format %q: expected text or json", opts.format)
+		return fmt.Errorf("invalid --format %q: expected text, json, or sarif", opts.format)
 	}
 
 	if opts.failOn == "" {
@@ -180,6 +182,11 @@ func emitReport(r report.Report, opts scanOptions, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	sarifData, err := report.SARIFBytes(r)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
 
 	if opts.reportPath != "" {
 		if err := os.WriteFile(opts.reportPath, data, 0o600); err != nil {
@@ -187,13 +194,24 @@ func emitReport(r report.Report, opts scanOptions, stdout, stderr io.Writer) int
 			return 2
 		}
 	}
+	if opts.sarifPath != "" {
+		if err := os.WriteFile(opts.sarifPath, sarifData, 0o600); err != nil {
+			fmt.Fprintf(stderr, "write SARIF report %s: %v\n", opts.sarifPath, err)
+			return 2
+		}
+	}
 
 	if opts.format == "json" {
 		fmt.Fprintln(stdout, string(data))
+	} else if opts.format == "sarif" {
+		fmt.Fprintln(stdout, string(sarifData))
 	} else if !opts.quiet {
 		report.WriteTerminalSummary(stdout, r)
 		if opts.reportPath != "" {
 			fmt.Fprintf(stdout, "Report written: %s\n", opts.reportPath)
+		}
+		if opts.sarifPath != "" {
+			fmt.Fprintf(stdout, "SARIF report written: %s\n", opts.sarifPath)
 		}
 	}
 
@@ -211,9 +229,9 @@ Version: %s
 Usage:
   argusgate --help
   argusgate --version
-  argusgate scan --config <path> [--policy <path>] [--report <path>] [--fail-on high] [--format text|json] [--quiet]
+  argusgate scan --config <path> [--policy <path>] [--report <path>] [--sarif <path>] [--fail-on high] [--format text|json|sarif] [--quiet]
   argusgate policy validate --policy <path>
-  argusgate fixtures scan --path <path> [--policy <path>] [--report <path>] [--fail-on high] [--format text|json] [--quiet]
+  argusgate fixtures scan --path <path> [--policy <path>] [--report <path>] [--sarif <path>] [--fail-on high] [--format text|json|sarif] [--quiet]
 
 Commands:
   scan            Scan a local MCP-style config file. Does not start servers or execute commands.
@@ -223,8 +241,9 @@ Commands:
 Scan flags:
   --policy <path>   Optional YAML policy. Missing policy uses safe MVP defaults.
   --report <path>   Optional JSON report output path.
+  --sarif <path>    Optional SARIF 2.1.0 report output path.
   --fail-on <level> Override policy fail_on. Valid: low, medium, high, critical.
-  --format <format> Stdout format. Valid: text, json. Default: text.
+  --format <format> Stdout format. Valid: text, json, sarif. Default: text.
   --quiet           Suppress text summary. Errors still print to stderr.
 
 Exit codes:

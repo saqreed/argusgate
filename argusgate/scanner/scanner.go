@@ -9,7 +9,7 @@ import (
 	"github.com/saqreed/argusgate/argusgate/scanner/detectors"
 )
 
-const Version = "0.1.5"
+const Version = "0.2.0"
 
 func ScanFixtures(path string, p policy.Policy) (report.Report, error) {
 	doc, err := mcp.LoadFixtures(path)
@@ -28,6 +28,7 @@ func ScanConfig(path string, p policy.Policy) (report.Report, error) {
 }
 
 func ScanDocument(sourceType string, doc mcp.Document, p policy.Policy) report.Report {
+	scannedAt := time.Now().UTC()
 	var findings []report.Finding
 	for _, detector := range detectors.DefaultDetectors() {
 		for _, server := range doc.Servers {
@@ -40,10 +41,13 @@ func ScanDocument(sourceType string, doc mcp.Document, p policy.Policy) report.R
 
 	findings = append(findings, policy.EvaluateServers(p, doc.Servers)...)
 	findings = append(findings, policy.EvaluateTools(p, doc.Tools)...)
+	findings = report.EnsureFingerprints(findings)
+	findings = policy.ApplySuppressions(p, findings, scannedAt)
+	findings = report.EnsureFingerprints(findings)
 	decision := policy.DecideExit(p, findings)
 
 	return report.Build(report.Input{
-		ScannedAt:         time.Now().UTC(),
+		ScannedAt:         scannedAt,
 		Version:           Version,
 		SourceType:        sourceType,
 		SourcePath:        doc.SourcePath,

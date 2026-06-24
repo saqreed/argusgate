@@ -3,11 +3,15 @@ package policy
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/saqreed/argusgate/argusgate/scanner/severity"
 	"gopkg.in/yaml.v3"
 )
+
+var suppressionFingerprintRX = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
 
 type rawPolicy struct {
 	Version  string                `yaml:"version"`
@@ -56,11 +60,27 @@ func Validate(p Policy) error {
 	if p.Version == "" {
 		return fmt.Errorf("policy version is required")
 	}
+	if p.Version != "0.1" && p.Version != "0.2" {
+		return fmt.Errorf("unsupported policy version %q", p.Version)
+	}
 	if !p.Defaults.FailOn.IsValid() {
 		return fmt.Errorf("invalid fail_on severity %q", p.Defaults.FailOn)
 	}
 	if p.Defaults.AllowedSeverity != "" && !p.Defaults.AllowedSeverity.IsValid() {
 		return fmt.Errorf("invalid allowed_severity %q", p.Defaults.AllowedSeverity)
+	}
+	for i, suppression := range p.Rules.Suppressions {
+		if !suppressionFingerprintRX.MatchString(strings.TrimSpace(suppression.Fingerprint)) {
+			return fmt.Errorf("rules.suppressions[%d].fingerprint must be a 64-character sha256 hex value", i)
+		}
+		if strings.TrimSpace(suppression.Reason) == "" {
+			return fmt.Errorf("rules.suppressions[%d].reason is required", i)
+		}
+		if strings.TrimSpace(suppression.Expires) != "" {
+			if _, err := time.Parse(time.DateOnly, suppression.Expires); err != nil {
+				return fmt.Errorf("rules.suppressions[%d].expires must use YYYY-MM-DD", i)
+			}
+		}
 	}
 	return nil
 }
