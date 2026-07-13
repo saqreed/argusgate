@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 
 	"github.com/saqreed/argusgate/argusgate/scanner/severity"
 )
@@ -158,7 +159,7 @@ func sarifResults(r Report) []sarifResult {
 		if r.SourcePath != "" {
 			result.Locations = []sarifLocation{{
 				PhysicalLocation: sarifPhysicalLocation{
-					ArtifactLocation: sarifArtifactLocation{URI: r.SourcePath},
+					ArtifactLocation: sarifArtifactLocation{URI: strings.ReplaceAll(r.SourcePath, "\\", "/")},
 				},
 				LogicalLocations: []sarifLogicalLocation{{
 					Name:               finding.ToolName,

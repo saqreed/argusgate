@@ -24,7 +24,7 @@ func TestRunHelpAndVersion(t *testing.T) {
 	if code := Run([]string{"--version"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("version exit code = %d, stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "argusgate version 0.2.0") {
+	if !strings.Contains(stdout.String(), "argusgate version 0.2.5") {
 		t.Fatalf("unexpected version output: %s", stdout.String())
 	}
 }
@@ -146,6 +146,49 @@ func TestPolicyValidate(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "Policy valid") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+}
+
+func TestSubcommandHelpExitsZero(t *testing.T) {
+	for _, args := range [][]string{{"scan", "--help"}, {"policy", "--help"}, {"fixtures", "--help"}} {
+		var stdout, stderr bytes.Buffer
+		if code := Run(args, &stdout, &stderr); code != 0 {
+			t.Fatalf("%v exit code = %d, stderr=%s", args, code, stderr.String())
+		}
+	}
+}
+
+func TestUnexpectedArgumentExitsTwo(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"fixtures", "scan", "--path", repoPath(t, "examples", "fixtures", "safe-tools.yaml"), "unexpected"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "unexpected argument") {
+		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestErrorsRemoveTerminalControlSequences(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"fixtures", "scan", "--path", repoPath(t, "examples", "fixtures", "safe-tools.yaml"), "--format", "\x1b[31mxml"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if strings.ContainsRune(stderr.String(), '\x1b') {
+		t.Fatalf("terminal escape leaked to stderr: %q", stderr.String())
+	}
+}
+
+func TestOutputPathMustNotOverwriteInputOrAnotherOutput(t *testing.T) {
+	input := repoPath(t, "examples", "fixtures", "safe-tools.yaml")
+	same := filepath.Join(t.TempDir(), "same-output")
+	cases := [][]string{
+		{"fixtures", "scan", "--path", input, "--report", input},
+		{"fixtures", "scan", "--path", input, "--report", same, "--sarif", same},
+	}
+	for _, args := range cases {
+		var stdout, stderr bytes.Buffer
+		if code := Run(args, &stdout, &stderr); code != 2 {
+			t.Fatalf("%v exit code = %d, stderr=%s", args, code, stderr.String())
+		}
 	}
 }
 

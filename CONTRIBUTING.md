@@ -1,6 +1,6 @@
 # Contributing
 
-ArgusGate is an early open-source MCP security scanner. Contributions should keep the v0.1 scope small, testable, and honest.
+ArgusGate is an early open-source MCP security scanner. Contributions should keep the v0.2 scope small, testable, and honest.
 
 ## Development Setup
 
@@ -11,6 +11,7 @@ Requirements:
 Run:
 
 ```bash
+go mod verify
 go test ./...
 go vet ./...
 mkdir -p bin

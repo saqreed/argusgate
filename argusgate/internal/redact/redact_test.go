@@ -53,6 +53,32 @@ func TestSnippetTruncatesUTF8Safely(t *testing.T) {
 	}
 }
 
+func TestTextRedactsUnterminatedPrivateKey(t *testing.T) {
+	input := "-----BEGIN PRIVATE KEY-----\nFAKE_PRIVATE_KEY_DO_NOT_USE"
+	got := Text(input)
+	if strings.Contains(got, "FAKE_PRIVATE_KEY_DO_NOT_USE") {
+		t.Fatalf("unterminated private key leaked: %s", got)
+	}
+}
+
+func TestTextRedactsQuotedAndCommandLineSecrets(t *testing.T) {
+	input := `password="FAKE PASSWORD DO NOT USE" --token FAKE_TOKEN_DO_NOT_USE_1234567890`
+	got := Text(input)
+	if strings.Contains(got, "FAKE PASSWORD DO NOT USE") || strings.Contains(got, "FAKE_TOKEN_DO_NOT_USE_1234567890") {
+		t.Fatalf("secret leaked after redaction: %s", got)
+	}
+}
+
+func TestTerminalRemovesControlSequences(t *testing.T) {
+	got := Terminal("safe\x1b[31m\nforged")
+	if strings.ContainsRune(got, '\x1b') || strings.ContainsAny(got, "\r\n") {
+		t.Fatalf("terminal controls survived: %q", got)
+	}
+	if got != "safe forged" {
+		t.Fatalf("unexpected terminal text: %q", got)
+	}
+}
+
 func containsAny(text string, values []string) bool {
 	for _, value := range values {
 		for i := 0; i+len(value) <= len(text); i++ {

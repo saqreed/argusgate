@@ -95,6 +95,10 @@ func ApplySuppressions(p Policy, findings []report.Finding, now time.Time) []rep
 
 	out := make([]report.Finding, 0, len(findings)+len(expiredFindings))
 	for _, finding := range findings {
+		if finding.ID == "AG-SCAN001" {
+			out = append(out, finding)
+			continue
+		}
 		if reason, ok := active[strings.ToLower(strings.TrimSpace(finding.Fingerprint))]; ok && finding.Fingerprint != "" {
 			finding.Suppressed = true
 			finding.SuppressionReason = reason
@@ -260,13 +264,23 @@ func extractPolicyPathCandidates(text string) []string {
 
 	candidates := make([]string, 0, len(matches))
 	for _, match := range matches {
-		candidate := text[match[0]:match[1]]
+		candidate := trimPathPunctuation(text[match[0]:match[1]])
+		if candidate == "" {
+			continue
+		}
 		if shouldSkipPathCandidate(text, match[0], candidate) {
 			continue
 		}
 		candidates = append(candidates, candidate)
 	}
 	return candidates
+}
+
+func trimPathPunctuation(candidate string) string {
+	if strings.ContainsAny(candidate, "/\\") {
+		return strings.TrimRight(candidate, ".:")
+	}
+	return candidate
 }
 
 func shouldSkipPathCandidate(text string, start int, candidate string) bool {

@@ -119,6 +119,7 @@ func TestSecretExposureDetectorFindsCommonTokenShapes(t *testing.T) {
 
 func TestSecretExposureDetectorFindsAdditionalEcosystemTokens(t *testing.T) {
 	slackToken := "xoxb-" + strings.Repeat("1", 12) + "-" + strings.Repeat("2", 12) + "-FAKEFAKEFAKEFAKEFAKE"
+	gitLabToken := "glpat-" + strings.Repeat("FAKE", 8)
 	tool := mcp.ToolDefinition{
 		ServerID: "s1",
 		Name:     "ecosystem_tokens",
@@ -127,17 +128,18 @@ func TestSecretExposureDetectorFindsAdditionalEcosystemTokens(t *testing.T) {
 			"npm_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
 			"pypi-AgEIcHlwaS5vcmcCFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
 			"AIzaSyA-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
+			gitLabToken,
 		}, " "),
 	}
 
 	findings := SecretExposureDetector{}.ScanTool(tool)
-	for _, id := range []string{"AG-SE011", "AG-SE012", "AG-SE013", "AG-SE014"} {
+	for _, id := range []string{"AG-SE011", "AG-SE012", "AG-SE013", "AG-SE014", "AG-SE015"} {
 		if !hasDetectorFinding(findings, id) {
 			t.Fatalf("expected %s for ecosystem token shapes, got %#v", id, findings)
 		}
 	}
 	for _, finding := range findings {
-		if containsAnyText(finding.Evidence, []string{"xoxb-", "npm_FAKE", "pypi-", "AIzaSyA-"}) {
+		if containsAnyText(finding.Evidence, []string{"xoxb-", "npm_FAKE", "pypi-", "AIzaSyA-", gitLabToken}) {
 			t.Fatalf("secret leaked in evidence: %#v", finding)
 		}
 	}
@@ -258,6 +260,20 @@ func TestDangerousCapabilityDetectorDoesNotTreatGenericUpdateAsDatabaseWrite(t *
 	findings := DangerousCapabilityDetector{}.ScanTool(tool)
 	if hasDetectorFinding(findings, "AG-DC008") {
 		t.Fatalf("generic update text should not be classified as database write: %#v", findings)
+	}
+}
+
+func TestSQLDetectorsDoNotTreatDatabaseDocumentationAsWriteCapability(t *testing.T) {
+	tool := mcp.ToolDefinition{
+		ServerID:    "s1",
+		Name:        "database_docs",
+		Description: "Update database documentation that explains the UPDATE statement.",
+	}
+	if findings := (SQLRiskDetector{}).ScanTool(tool); hasDetectorFinding(findings, "AG-SQL001") {
+		t.Fatalf("database documentation should not be SQL write capability: %#v", findings)
+	}
+	if findings := (DangerousCapabilityDetector{}).ScanTool(tool); hasDetectorFinding(findings, "AG-DC008") {
+		t.Fatalf("database documentation should not be database write capability: %#v", findings)
 	}
 }
 
@@ -389,6 +405,72 @@ func TestSQLRiskDetectorDoesNotFlagBlockedWriteStatements(t *testing.T) {
 	}
 	if hasDetectorFinding(findings, "AG-SQL001") {
 		t.Fatalf("blocked write statements should not be classified as SQL write risk: %#v", findings)
+	}
+}
+
+func TestSecretDetectorUsesStructuredKeyValueContext(t *testing.T) {
+	server := mcp.ServerConfig{ID: "s1", Env: map[string]string{"PASSWORD": "FAKE PASSWORD DO NOT USE"}}
+	findings := SecretExposureDetector{}.ScanServer(server)
+	if !hasDetectorFinding(findings, "AG-SE002") {
+		t.Fatalf("expected secret-like env finding, got %#v", findings)
+	}
+	for _, finding := range findings {
+		if strings.Contains(finding.Evidence, "FAKE PASSWORD DO NOT USE") || strings.Contains(finding.Evidence, "DO NOT USE") {
+			t.Fatalf("secret leaked in evidence: %#v", finding)
+		}
+	}
+}
+
+func TestSecretDetectorFindsCommandLineSecretArguments(t *testing.T) {
+	server := mcp.ServerConfig{ID: "s1", Args: []string{"--password FAKE_PASSWORD_DO_NOT_USE"}}
+	findings := SecretExposureDetector{}.ScanServer(server)
+	if !hasDetectorFinding(findings, "AG-SE016") {
+		t.Fatalf("expected command-line secret finding, got %#v", findings)
+	}
+	for _, finding := range findings {
+		if strings.Contains(finding.Evidence, "FAKE_PASSWORD_DO_NOT_USE") {
+			t.Fatalf("command-line secret leaked: %#v", finding)
+		}
+	}
+
+	placeholder := mcp.ServerConfig{ID: "s2", Args: []string{"--password ${MCP_PASSWORD}"}}
+	if findings := (SecretExposureDetector{}).ScanServer(placeholder); hasDetectorFinding(findings, "AG-SE016") {
+		t.Fatalf("command-line placeholder should not be a secret exposure: %#v", findings)
+	}
+}
+
+func TestSecretDetectorIgnoresEnvironmentReferences(t *testing.T) {
+	server := mcp.ServerConfig{ID: "s1", Env: map[string]string{"TOKEN": "${MCP_TOKEN}"}}
+	if findings := (SecretExposureDetector{}).ScanServer(server); hasDetectorFinding(findings, "AG-SE002") {
+		t.Fatalf("environment reference should not be a secret exposure: %#v", findings)
+	}
+}
+
+func TestDangerousCapabilityDetectorScansServerCommands(t *testing.T) {
+	server := mcp.ServerConfig{ID: "local", Command: "bash", Args: []string{"-c", "run-server"}}
+	if findings := (DangerousCapabilityDetector{}).ScanServer(server); !hasDetectorFinding(findings, "AG-DC001") {
+		t.Fatalf("expected shell capability for server command, got %#v", findings)
+	}
+}
+
+func TestDangerousCapabilityDetectorDoesNotTreatCloudReferenceAsAdministration(t *testing.T) {
+	tool := mcp.ToolDefinition{ServerID: "s1", Name: "docs", Description: "Read documentation for AWS-compatible object storage."}
+	if findings := (DangerousCapabilityDetector{}).ScanTool(tool); hasDetectorFinding(findings, "AG-DC010") {
+		t.Fatalf("passive AWS reference should not be cloud CLI administration: %#v", findings)
+	}
+}
+
+func TestToolPoisoningDetectorAvoidsGenericBypassFalsePositive(t *testing.T) {
+	tool := mcp.ToolDefinition{ServerID: "s1", Name: "cache", Description: "Bypass cache for the next safe read request."}
+	if findings := (ToolPoisoningDetector{}).ScanTool(tool); hasDetectorFinding(findings, "AG-TP001") {
+		t.Fatalf("generic cache bypass should not be tool poisoning: %#v", findings)
+	}
+}
+
+func TestToolPoisoningDetectorFindsUnclosedComment(t *testing.T) {
+	tool := mcp.ToolDefinition{ServerID: "s1", Name: "hidden", Description: "Visible text <!-- hidden instruction"}
+	if findings := (ToolPoisoningDetector{}).ScanTool(tool); !hasDetectorFinding(findings, "AG-TP002") {
+		t.Fatalf("expected unclosed hidden comment finding, got %#v", findings)
 	}
 }
 

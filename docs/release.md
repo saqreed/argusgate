@@ -1,6 +1,6 @@
 # Release Process
 
-ArgusGate publishes prerelease builds from version tags such as `v0.2.0`.
+ArgusGate publishes prerelease builds from version tags such as `v0.2.5`.
 
 ## Release Assets
 
@@ -29,6 +29,7 @@ The workflow also publishes `SHA256SUMS.txt` for release asset verification.
 3. Run:
 
    ```bash
+   go mod verify
    go test ./...
    go vet ./...
    mkdir -p bin
@@ -39,9 +40,9 @@ The workflow also publishes `SHA256SUMS.txt` for release asset verification.
 5. Create and push an annotated tag:
 
    ```bash
-   git tag -a v0.2.0 -m "ArgusGate v0.2.0"
+   git tag -a v0.2.5 -m "ArgusGate v0.2.5"
    git push origin main
-   git push origin v0.2.0
+   git push origin v0.2.5
    ```
 
 Pushing the tag starts `.github/workflows/release.yml`. The workflow runs tests, verifies that the tag matches `argusgate/scanner.Version`, checks that `CHANGELOG.md` has a matching section, cross-compiles release archives, verifies the Linux `amd64` binary version, generates checksums, and creates or updates a GitHub prerelease.
@@ -59,14 +60,14 @@ sha256sum -c SHA256SUMS.txt --ignore-missing
 Windows PowerShell:
 
 ```powershell
-Get-FileHash .\argusgate_v0.2.0_windows_amd64.zip -Algorithm SHA256
+Get-FileHash .\argusgate_v0.2.5_windows_amd64.zip -Algorithm SHA256
 ```
 
 Compare the PowerShell hash with the matching line in `SHA256SUMS.txt`.
 
-## v0.2 Smoke Test
+## v0.2.5 Smoke Test
 
-Before tagging v0.2.0 or later, verify JSON and SARIF outputs:
+Before tagging v0.2.5, verify JSON and SARIF outputs:
 
 ```bash
 ./bin/argusgate fixtures scan \

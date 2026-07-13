@@ -5,9 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
+	"github.com/saqreed/argusgate/argusgate/internal/fileio"
+	"github.com/saqreed/argusgate/argusgate/internal/redact"
 	"github.com/saqreed/argusgate/argusgate/policy"
 	"github.com/saqreed/argusgate/argusgate/report"
 	"github.com/saqreed/argusgate/argusgate/scanner"
@@ -53,6 +56,13 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 	configPath := fs.String("config", "", "path to MCP config JSON/YAML")
 	opts := newScanOptions(fs)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	if err := rejectUnexpectedArgs(fs); err != nil {
+		writeCLIError(stderr, err)
 		return 2
 	}
 	if *configPath == "" {
@@ -62,22 +72,30 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 
 	p, err := loadPolicyOrDefault(opts.policyPath)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		writeCLIError(stderr, err)
 		return 2
 	}
 	if err := applyScanOptions(&p, *opts); err != nil {
-		fmt.Fprintln(stderr, err)
+		writeCLIError(stderr, err)
+		return 2
+	}
+	if err := validateOutputPaths(*configPath, opts.policyPath, opts.reportPath, opts.sarifPath); err != nil {
+		writeCLIError(stderr, err)
 		return 2
 	}
 	r, err := scanner.ScanConfig(*configPath, p)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		writeCLIError(stderr, err)
 		return 2
 	}
 	return emitReport(r, *opts, stdout, stderr)
 }
 
 func runPolicy(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
+		fmt.Fprintln(stdout, "usage: argusgate policy validate --policy <path>")
+		return 0
+	}
 	if len(args) == 0 || args[0] != "validate" {
 		fmt.Fprintln(stderr, "usage: argusgate policy validate --policy <path>")
 		return 2
@@ -86,6 +104,13 @@ func runPolicy(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	policyPath := fs.String("policy", "", "path to policy YAML")
 	if err := fs.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	if err := rejectUnexpectedArgs(fs); err != nil {
+		writeCLIError(stderr, err)
 		return 2
 	}
 	if *policyPath == "" {
@@ -94,14 +119,18 @@ func runPolicy(args []string, stdout, stderr io.Writer) int {
 	}
 	p, err := policy.LoadFile(*policyPath)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		writeCLIError(stderr, err)
 		return 2
 	}
-	fmt.Fprintf(stdout, "Policy valid: %s (fail_on=%s)\n", *policyPath, p.Defaults.FailOn)
+	fmt.Fprintf(stdout, "Policy valid: %s (fail_on=%s)\n", redact.Terminal(*policyPath), p.Defaults.FailOn)
 	return 0
 }
 
 func runFixtures(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
+		fmt.Fprintln(stdout, "usage: argusgate fixtures scan --path <path> [--policy <path>] [--report <path>] [--sarif <path>]")
+		return 0
+	}
 	if len(args) == 0 || args[0] != "scan" {
 		fmt.Fprintln(stderr, "usage: argusgate fixtures scan --path <path> [--policy <path>] [--report <path>]")
 		return 2
@@ -111,6 +140,13 @@ func runFixtures(args []string, stdout, stderr io.Writer) int {
 	fixturePath := fs.String("path", "", "path to fixture JSON/YAML")
 	opts := newScanOptions(fs)
 	if err := fs.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	if err := rejectUnexpectedArgs(fs); err != nil {
+		writeCLIError(stderr, err)
 		return 2
 	}
 	if *fixturePath == "" {
@@ -120,16 +156,20 @@ func runFixtures(args []string, stdout, stderr io.Writer) int {
 
 	p, err := loadPolicyOrDefault(opts.policyPath)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		writeCLIError(stderr, err)
 		return 2
 	}
 	if err := applyScanOptions(&p, *opts); err != nil {
-		fmt.Fprintln(stderr, err)
+		writeCLIError(stderr, err)
+		return 2
+	}
+	if err := validateOutputPaths(*fixturePath, opts.policyPath, opts.reportPath, opts.sarifPath); err != nil {
+		writeCLIError(stderr, err)
 		return 2
 	}
 	r, err := scanner.ScanFixtures(*fixturePath, p)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		writeCLIError(stderr, err)
 		return 2
 	}
 	return emitReport(r, *opts, stdout, stderr)
@@ -179,24 +219,24 @@ func emitReport(r report.Report, opts scanOptions, stdout, stderr io.Writer) int
 	opts.format = normalizeFormat(opts.format)
 	data, err := report.JSONBytes(r)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		writeCLIError(stderr, err)
 		return 2
 	}
 	sarifData, err := report.SARIFBytes(r)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		writeCLIError(stderr, err)
 		return 2
 	}
 
 	if opts.reportPath != "" {
-		if err := os.WriteFile(opts.reportPath, data, 0o600); err != nil {
-			fmt.Fprintf(stderr, "write report %s: %v\n", opts.reportPath, err)
+		if err := fileio.WritePrivateFile(opts.reportPath, data); err != nil {
+			writeCLIError(stderr, fmt.Errorf("write report %s: %w", opts.reportPath, err))
 			return 2
 		}
 	}
 	if opts.sarifPath != "" {
-		if err := os.WriteFile(opts.sarifPath, sarifData, 0o600); err != nil {
-			fmt.Fprintf(stderr, "write SARIF report %s: %v\n", opts.sarifPath, err)
+		if err := fileio.WritePrivateFile(opts.sarifPath, sarifData); err != nil {
+			writeCLIError(stderr, fmt.Errorf("write SARIF report %s: %w", opts.sarifPath, err))
 			return 2
 		}
 	}
@@ -208,10 +248,10 @@ func emitReport(r report.Report, opts scanOptions, stdout, stderr io.Writer) int
 	} else if !opts.quiet {
 		report.WriteTerminalSummary(stdout, r)
 		if opts.reportPath != "" {
-			fmt.Fprintf(stdout, "Report written: %s\n", opts.reportPath)
+			fmt.Fprintf(stdout, "Report written: %s\n", redact.Terminal(opts.reportPath))
 		}
 		if opts.sarifPath != "" {
-			fmt.Fprintf(stdout, "SARIF report written: %s\n", opts.sarifPath)
+			fmt.Fprintf(stdout, "SARIF report written: %s\n", redact.Terminal(opts.sarifPath))
 		}
 	}
 
@@ -255,4 +295,90 @@ Exit codes:
 
 func normalizeFormat(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func writeCLIError(w io.Writer, err error) {
+	fmt.Fprintln(w, redact.Terminal(err.Error()))
+}
+
+func rejectUnexpectedArgs(fs *flag.FlagSet) error {
+	if fs.NArg() == 0 {
+		return nil
+	}
+	return fmt.Errorf("unexpected argument(s): %s", strings.Join(fs.Args(), " "))
+}
+
+func validateOutputPaths(inputPath, policyPath, reportPath, sarifPath string) error {
+	outputs := []struct {
+		name string
+		path string
+	}{
+		{"--report", reportPath},
+		{"--sarif", sarifPath},
+	}
+	inputs := []struct {
+		name string
+		path string
+	}{
+		{"scan input", inputPath},
+		{"policy", policyPath},
+	}
+
+	for _, output := range outputs {
+		if output.path == "" {
+			continue
+		}
+		for _, input := range inputs {
+			if input.path == "" {
+				continue
+			}
+			equal, err := samePath(output.path, input.path)
+			if err != nil {
+				return fmt.Errorf("validate %s path: %w", output.name, err)
+			}
+			if equal {
+				return fmt.Errorf("%s path must not overwrite %s: %s", output.name, input.name, output.path)
+			}
+		}
+	}
+	if reportPath != "" && sarifPath != "" {
+		equal, err := samePath(reportPath, sarifPath)
+		if err != nil {
+			return fmt.Errorf("compare output paths: %w", err)
+		}
+		if equal {
+			return fmt.Errorf("--report and --sarif must use different paths")
+		}
+	}
+	return nil
+}
+
+func samePath(left, right string) (bool, error) {
+	leftPath, err := canonicalPath(left)
+	if err != nil {
+		return false, err
+	}
+	rightPath, err := canonicalPath(right)
+	if err != nil {
+		return false, err
+	}
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(leftPath, rightPath), nil
+	}
+	return leftPath == rightPath, nil
+}
+
+func canonicalPath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return filepath.Clean(resolved), nil
+	}
+	parent := filepath.Dir(abs)
+	if resolvedParent, err := filepath.EvalSymlinks(parent); err == nil {
+		return filepath.Join(resolvedParent, filepath.Base(abs)), nil
+	}
+	return filepath.Clean(abs), nil
 }

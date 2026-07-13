@@ -20,7 +20,8 @@ Include:
 
 | Version | Support |
 | --- | --- |
-| `0.1.x` | Best-effort security fixes |
+| `0.2.x` | Best-effort security fixes |
+| `0.1.x` | Unsupported |
 
 ## Scanner Safety Scope
 

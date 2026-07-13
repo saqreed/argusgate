@@ -2,6 +2,7 @@ package detectors
 
 import (
 	"encoding/base64"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -24,11 +25,15 @@ var poisoningPhrases = []string{
 	"read ~/.ssh",
 	"read private key",
 	"read .env",
-	"bypass",
+	"bypass security",
+	"bypass policy",
+	"bypass restrictions",
+	"bypass safeguards",
+	"bypass authentication",
 }
 
 var (
-	markdownCommentRX = regexp.MustCompile(`(?s)<!--.*?-->`)
+	markdownCommentRX = regexp.MustCompile(`(?s)<!--(?:.*?-->|.*$)`)
 	base64LikeRX      = regexp.MustCompile(`[A-Za-z0-9+/_-]{40,}={0,2}`)
 )
 
@@ -60,7 +65,7 @@ func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Findin
 			}
 		}
 
-		for _, match := range markdownCommentRX.FindAllString(blob.Text, -1) {
+		for _, match := range markdownCommentRX.FindAllString(blob.Text, 100) {
 			findings = append(findings, report.Finding{
 				ID:              "AG-TP002",
 				Title:           "Hidden markdown or HTML comment in tool metadata",
@@ -77,7 +82,7 @@ func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Findin
 			})
 		}
 
-		for _, encoded := range base64LikeRX.FindAllString(blob.Text, -1) {
+		for _, encoded := range base64LikeRX.FindAllString(blob.Text, 100) {
 			if len(encoded) > 4096 {
 				continue
 			}
@@ -117,7 +122,7 @@ func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Findin
 				ServerID:        tool.ServerID,
 				ToolName:        tool.Name,
 				Location:        blob.Location,
-				Evidence:        redact.Snippet(blob.Text, 180),
+				Evidence:        suspiciousInvisibleEvidence(blob.Text),
 				Explanation:     "Tool metadata contains invisible or zero-width characters that can hide instructions from reviewers.",
 				Recommendation:  "Remove invisible formatting characters from tool metadata and review the original source.",
 				Confidence:      "medium",
@@ -125,6 +130,19 @@ func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Findin
 		}
 	}
 	return findings
+}
+
+func suspiciousInvisibleEvidence(value string) string {
+	for _, ch := range value {
+		switch ch {
+		case '\u200b', '\u200c', '\u200d', '\ufeff', '\u2060':
+			return fmt.Sprintf("invisible character U+%04X", ch)
+		}
+		if ch < 32 && ch != '\n' && ch != '\r' && ch != '\t' {
+			return fmt.Sprintf("control character U+%04X", ch)
+		}
+	}
+	return "invisible control character"
 }
 
 func containsSuspiciousInvisibleCharacter(value string) bool {

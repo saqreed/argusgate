@@ -1,12 +1,20 @@
 package mcp
 
 import (
+	"bytes"
 	"fmt"
-	"os"
+	"io"
 	"sort"
 	"strings"
 
+	"github.com/saqreed/argusgate/argusgate/internal/fileio"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	MaxDocumentBytes int64 = 16 << 20
+	MaxServers             = 2048
+	MaxTools               = 10000
 )
 
 func LoadFixtures(path string) (Document, error) {
@@ -67,8 +75,53 @@ func loadDocument(path string, fixtureMode bool) (Document, error) {
 		}
 		return tools[i].ServerID < tools[j].ServerID
 	})
+	if err := validateDocumentContent(path, fixtureMode, servers, tools); err != nil {
+		return Document{}, err
+	}
 
 	return Document{SourcePath: path, Servers: servers, Tools: tools}, nil
+}
+
+func validateDocumentContent(path string, fixtureMode bool, servers []ServerConfig, tools []ToolDefinition) error {
+	if len(servers) > MaxServers {
+		return fmt.Errorf("parse %s: %d servers exceed maximum of %d", path, len(servers), MaxServers)
+	}
+	if len(tools) > MaxTools {
+		return fmt.Errorf("parse %s: %d tools exceed maximum of %d", path, len(tools), MaxTools)
+	}
+	if fixtureMode && len(tools) == 0 {
+		return fmt.Errorf("parse %s: no MCP tools found", path)
+	}
+	if !fixtureMode && len(servers) == 0 {
+		return fmt.Errorf("parse %s: no MCP servers found", path)
+	}
+
+	serverIDs := make(map[string]struct{}, len(servers))
+	for i, server := range servers {
+		id := strings.TrimSpace(server.ID)
+		if id == "" {
+			return fmt.Errorf("parse %s: servers[%d].id is required", path, i)
+		}
+		key := strings.ToLower(id)
+		if _, exists := serverIDs[key]; exists {
+			return fmt.Errorf("parse %s: duplicate server id %q", path, server.ID)
+		}
+		serverIDs[key] = struct{}{}
+	}
+
+	toolNames := make(map[string]struct{}, len(tools))
+	for i, tool := range tools {
+		name := strings.TrimSpace(tool.Name)
+		if name == "" {
+			return fmt.Errorf("parse %s: tools[%d].name is required", path, i)
+		}
+		key := strings.ToLower(tool.ServerID + "\x00" + name)
+		if _, exists := toolNames[key]; exists {
+			return fmt.Errorf("parse %s: duplicate tool %q for server %q", path, tool.Name, tool.ServerID)
+		}
+		toolNames[key] = struct{}{}
+	}
+	return nil
 }
 
 func validateDocumentShapes(path string, root map[string]any) error {
@@ -116,10 +169,8 @@ func validateServersShape(location string, value any) error {
 			if !ok {
 				return fmt.Errorf("%s[%d]: expected server object", location, i)
 			}
-			if tools, ok := raw["tools"]; ok {
-				if err := validateToolsShape(fmt.Sprintf("%s[%d].tools", location, i), tools); err != nil {
-					return err
-				}
+			if err := validateServerObject(fmt.Sprintf("%s[%d]", location, i), raw); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -144,10 +195,8 @@ func validateNamedServerMapShape(location string, value any) error {
 		if !ok {
 			return fmt.Errorf("%s.%s: expected server object", location, id)
 		}
-		if tools, ok := raw["tools"]; ok {
-			if err := validateToolsShape(fmt.Sprintf("%s.%s.tools", location, id), tools); err != nil {
-				return err
-			}
+		if err := validateServerObject(fmt.Sprintf("%s.%s", location, id), raw); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -157,16 +206,95 @@ func validateToolsShape(location string, value any) error {
 	switch typed := value.(type) {
 	case []any:
 		for i, item := range typed {
-			if _, ok := item.(map[string]any); !ok {
+			raw, ok := item.(map[string]any)
+			if !ok {
 				return fmt.Errorf("%s[%d]: expected tool object", location, i)
+			}
+			if err := validateToolObject(fmt.Sprintf("%s[%d]", location, i), raw); err != nil {
+				return err
 			}
 		}
 		return nil
 	case map[string]any:
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			if raw, ok := typed[key].(map[string]any); ok {
+				if err := validateToolObject(location+"."+key, raw); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	default:
 		return fmt.Errorf("%s: expected tool object map or list", location)
 	}
+}
+
+func validateServerObject(location string, raw map[string]any) error {
+	if err := requireStringFields(location, raw, "id", "name", "server_id", "title", "command", "cmd", "url", "endpoint", "base_url", "transport", "type"); err != nil {
+		return err
+	}
+	if args, ok := raw["args"]; ok && !isStringOrScalarList(args) {
+		return fmt.Errorf("%s.args: expected string or scalar list", location)
+	}
+	for _, key := range []string{"env", "headers"} {
+		if value, ok := raw[key]; ok {
+			if _, valid := value.(map[string]any); !valid {
+				return fmt.Errorf("%s.%s: expected object", location, key)
+			}
+		}
+	}
+	if tools, ok := raw["tools"]; ok {
+		return validateToolsShape(location+".tools", tools)
+	}
+	return nil
+}
+
+func validateToolObject(location string, raw map[string]any) error {
+	if err := requireStringFields(location, raw, "server_id", "server", "name", "id", "tool_name", "title", "description", "desc"); err != nil {
+		return err
+	}
+	for _, key := range []string{"inputSchema", "input_schema", "schema", "outputSchema", "output_schema", "annotations", "_meta", "meta", "metadata"} {
+		if value, ok := raw[key]; ok {
+			if _, valid := value.(map[string]any); !valid {
+				return fmt.Errorf("%s.%s: expected object", location, key)
+			}
+		}
+	}
+	return nil
+}
+
+func requireStringFields(location string, raw map[string]any, keys ...string) error {
+	for _, key := range keys {
+		if value, ok := raw[key]; ok {
+			if _, valid := value.(string); !valid {
+				return fmt.Errorf("%s.%s: expected string", location, key)
+			}
+		}
+	}
+	return nil
+}
+
+func isStringOrScalarList(value any) bool {
+	if _, ok := value.(string); ok {
+		return true
+	}
+	items, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range items {
+		switch item.(type) {
+		case string, bool, int, int64, uint64, float64, nil:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func syntheticServersForTools(tools []ToolDefinition, rawTools any) []ServerConfig {
@@ -197,16 +325,28 @@ func syntheticServersForTools(tools []ToolDefinition, rawTools any) []ServerConf
 }
 
 func readRoot(path string) (map[string]any, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fileio.ReadLimitedFile(path, MaxDocumentBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 
 	var decoded any
-	if err := yaml.Unmarshal(raw, &decoded); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	if err := decoder.Decode(&decoded); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	root, ok := normalizeYAML(decoded).(map[string]any)
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("parse %s: multiple YAML documents are not supported", path)
+		}
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	normalized, err := normalizeYAML(decoded)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	root, ok := normalized.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("parse %s: expected top-level object", path)
 	}
@@ -440,27 +580,43 @@ func asAnyMap(value any) map[string]any {
 	return raw
 }
 
-func normalizeYAML(value any) any {
+func normalizeYAML(value any) (any, error) {
 	switch typed := value.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(typed))
 		for key, item := range typed {
-			out[key] = normalizeYAML(item)
+			normalized, err := normalizeYAML(item)
+			if err != nil {
+				return nil, err
+			}
+			out[key] = normalized
 		}
-		return out
+		return out, nil
 	case map[any]any:
 		out := make(map[string]any, len(typed))
 		for key, item := range typed {
-			out[fmt.Sprint(key)] = normalizeYAML(item)
+			stringKey, ok := key.(string)
+			if !ok {
+				return nil, fmt.Errorf("mapping keys must be strings, got %T", key)
+			}
+			normalized, err := normalizeYAML(item)
+			if err != nil {
+				return nil, err
+			}
+			out[stringKey] = normalized
 		}
-		return out
+		return out, nil
 	case []any:
 		out := make([]any, len(typed))
 		for i, item := range typed {
-			out[i] = normalizeYAML(item)
+			normalized, err := normalizeYAML(item)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = normalized
 		}
-		return out
+		return out, nil
 	default:
-		return value
+		return value, nil
 	}
 }

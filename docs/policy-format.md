@@ -20,17 +20,20 @@ ArgusGate policies are YAML files.
 
 Hyphenated field names such as `deny-tools` are accepted as aliases for underscore names. Server IDs are preserved exactly.
 
+Policy parsing is strict. Unknown fields, empty rule entries, multiple YAML documents, duplicate suppression fingerprints, and ambiguous aliases such as defining both `fail-on` and `fail_on` are rejected. Policy files are limited to 1 MiB and each rule list is limited to 1,024 entries.
+
 ## Severities
 
-Valid severities:
+Valid `defaults.fail_on` severities:
 
-- `info`
 - `low`
 - `medium`
 - `high`
 - `critical`
 
 `defaults.fail_on` controls the process exit code only. It does not suppress findings. A scan still records all detector and policy findings.
+
+`info` remains a finding severity and is valid for `defaults.allowed_severity`, but it is not a valid `defaults.fail_on` threshold.
 
 Suppressed findings are still recorded in JSON reports with `suppressed: true`, but they are excluded from severity summaries, SARIF results, and exit-code decisions.
 
@@ -85,6 +88,8 @@ servers:
 
 Suppressions are available in policy `version: "0.2"`. A suppression matches only a stable finding fingerprint from a previous ArgusGate JSON report.
 
+Policies using `version: "0.1"` must not define suppressions.
+
 ```yaml
 version: "0.2"
 rules:
@@ -102,6 +107,7 @@ Rules:
 - Expired suppressions are ignored and reported as medium policy finding `AG-POL006`.
 - Suppressed findings remain in JSON reports for auditability.
 - Suppressed findings do not affect exit code or SARIF output.
+- Scanner safety finding `AG-SCAN001` cannot be suppressed because it indicates incomplete analysis.
 
 See [schemas/policy.schema.json](schemas/policy.schema.json) for the machine-readable schema.
 

@@ -86,6 +86,7 @@ func Build(input Input) Report {
 			findings[i].ToolName = redact.Text(findings[i].ToolName)
 			findings[i].Location = redact.Text(findings[i].Location)
 			findings[i].Evidence = redact.Text(findings[i].Evidence)
+			findings[i].SuppressionReason = redact.Text(findings[i].SuppressionReason)
 		}
 		if findings[i].Fingerprint == "" {
 			findings[i].Fingerprint = Fingerprint(findings[i])
@@ -97,7 +98,7 @@ func Build(input Input) Report {
 		ScannedAt:        scannedAt.UTC().Format(time.RFC3339),
 		ArgusGateVersion: input.Version,
 		SourceType:       input.SourceType,
-		SourcePath:       input.SourcePath,
+		SourcePath:       redact.Text(input.SourcePath),
 		Servers:          summarizeServers(input.Servers),
 		Tools:            summarizeTools(input.Tools),
 		Findings:         findings,
@@ -114,6 +115,19 @@ func EnsureFingerprints(findings []Finding) []Finding {
 		if out[i].Fingerprint == "" {
 			out[i].Fingerprint = Fingerprint(out[i])
 		}
+	}
+	return out
+}
+
+func DeduplicateFindings(findings []Finding) []Finding {
+	out := make([]Finding, 0, len(findings))
+	seen := make(map[string]struct{}, len(findings))
+	for _, finding := range EnsureFingerprints(findings) {
+		if _, exists := seen[finding.Fingerprint]; exists {
+			continue
+		}
+		seen[finding.Fingerprint] = struct{}{}
+		out = append(out, finding)
 	}
 	return out
 }

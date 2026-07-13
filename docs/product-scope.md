@@ -17,6 +17,7 @@ The first useful version is a local, CLI-first scanner with policy validation an
 - Support `--fail-on`, `--format text|json|sarif`, `--sarif`, `--quiet`, and `--version` for release-ready CLI use.
 - Support reviewed finding suppressions by stable fingerprint in policy `version: "0.2"`.
 - Publish GitHub release archives and checksums for common Linux, macOS, and Windows targets.
+- Fail safely on non-regular, oversized, malformed, ambiguous, or empty local inputs instead of reporting a clean scan.
 - Return CI-friendly exit codes:
   - `0`: no findings at or above the fail threshold
   - `1`: findings at or above the fail threshold

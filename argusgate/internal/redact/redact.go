@@ -3,6 +3,7 @@ package redact
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 type rule struct {
@@ -13,12 +14,15 @@ type rule struct {
 var redactors = []rule{
 	{regexp.MustCompile(`(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)(Basic\s+)([A-Za-z0-9+/=]{8,})`), `${1}[REDACTED_SECRET]`},
+	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token)\s*[:=]\s*")([^"]*)(")`), `${1}[REDACTED_SECRET]${3}`},
+	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token)\s*[:=]\s*')([^']*)(')`), `${1}[REDACTED_SECRET]${3}`},
 	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token)\s*[:=]\s*["']?)([^"'\s,;]{4,})`), `${1}[REDACTED_SECRET]`},
+	{regexp.MustCompile(`(?i)(--(?:api[_-]?key|token|password|passwd|secret|authorization|access[_-]?token)\s+)([^\s,;]{4,})`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)((?:postgres|postgresql|mysql|mongodb|redis|amqp)://)([^\s"']+)`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)((?:https?|mcp)://)([^@\s"']+:[^@\s"']+)(@)`), `${1}[REDACTED_SECRET]${3}`},
 	{regexp.MustCompile(`(?i)([?&](?:api[_-]?key|token|password|passwd|secret|access[_-]?token)=)([^&#\s"']+)`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`), `[REDACTED_JWT]`},
-	{regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`), `[REDACTED_PRIVATE_KEY]`},
+	{regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)`), `[REDACTED_PRIVATE_KEY]`},
 	{regexp.MustCompile(`\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b`), `[REDACTED_SECRET]`},
 	{regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`), `[REDACTED_SECRET]`},
 	{regexp.MustCompile(`\bsk-[A-Za-z0-9][A-Za-z0-9_-]{16,}\b`), `[REDACTED_SECRET]`},
@@ -26,7 +30,10 @@ var redactors = []rule{
 	{regexp.MustCompile(`\bnpm_[A-Za-z0-9_-]{20,}\b`), `[REDACTED_SECRET]`},
 	{regexp.MustCompile(`\bpypi-[A-Za-z0-9_-]{20,}\b`), `[REDACTED_SECRET]`},
 	{regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{20,}\b`), `[REDACTED_SECRET]`},
+	{regexp.MustCompile(`\bglpat-[A-Za-z0-9_-]{20,}\b`), `[REDACTED_SECRET]`},
 }
+
+var ansiEscapeRX = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
 
 func Text(value string) string {
 	result := value
@@ -46,4 +53,16 @@ func Snippet(value string, max int) string {
 		return string(runes[:max])
 	}
 	return string(runes[:max-3]) + "..."
+}
+
+// Terminal removes terminal control sequences after secret redaction.
+func Terminal(value string) string {
+	value = ansiEscapeRX.ReplaceAllString(Text(value), "")
+	value = strings.Map(func(ch rune) rune {
+		if unicode.IsControl(ch) {
+			return ' '
+		}
+		return ch
+	}, value)
+	return strings.Join(strings.Fields(value), " ")
 }

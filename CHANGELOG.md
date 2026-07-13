@@ -2,6 +2,41 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## 0.2.5 - 2026-07-13
+
+### Added
+
+- Added bounded regular-file reads: MCP configs and fixtures are limited to 16 MiB, policies to 1 MiB, and non-regular inputs are rejected.
+- Added semantic MCP validation for required tool names, duplicate server/tool identities, known field types, multiple YAML documents, and empty scans.
+- Added server command and argument capability analysis for shell, container, cloud, infrastructure, and package-manager execution signals.
+- Added GitLab token-like and secret-bearing command-line argument detection and redaction.
+- Added a fail-safe 10,000-finding report limit with critical `AG-SCAN001` truncation reporting.
+
+### Changed
+
+- Policy parsing is now strict: unknown fields, normalized-key collisions, empty rule entries, duplicate suppressions, invalid `fail_on: info`, and v0.1 suppressions are rejected.
+- JSON and SARIF output files are written through private temporary files and atomically replaced without following output symlinks.
+- Config map traversal and finding deduplication are deterministic.
+- CI now verifies modules, runs the Go race detector on Linux, pins GitHub Actions to commit SHAs, and requires all six release archives.
+
+### Fixed
+
+- Prevented `--report` or `--sarif` from overwriting scan inputs, policy files, or each other.
+- Prevented suppressions from hiding fail-safe `AG-SCAN001` incomplete-analysis findings.
+- Fixed subcommand `--help` returning exit code `2` and rejected ignored trailing CLI arguments.
+- Prevented terminal control sequences in untrusted paths and metadata from reaching human-readable output.
+- Redacted secret-like values from suppression reasons and policy project names.
+- Detected unterminated private-key blocks without exposing their contents.
+- Detected secret-bearing environment and metadata key/value pairs while ignoring environment-variable references.
+- Reduced false positives for generic cache-bypass text, passive AWS references, and non-capability credential mentions.
+- Reduced path-policy false positives when an allowed path ends a sentence with punctuation.
+- Normalized Windows paths in SARIF artifact URIs.
+
+### Security
+
+- Official `govulncheck` analysis found no reachable Go vulnerabilities for this release candidate.
+- Input, policy, match, and finding limits reduce memory-exhaustion risk from hostile local fixtures.
+
 ## 0.2.0 - 2026-06-24
 
 ### Added

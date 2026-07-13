@@ -26,7 +26,7 @@ func TestBuildSortsFindingsAndRedactsEvidence(t *testing.T) {
 			Description: "token=FAKE_TOKEN_DO_NOT_USE_1234567890",
 		}},
 		Findings: []Finding{
-			{ID: "LOW", Severity: severity.Low, Evidence: "safe"},
+			{ID: "LOW", Severity: severity.Low, Evidence: "safe", SuppressionReason: "token=FAKE_TOKEN_DO_NOT_USE_1234567890"},
 			{ID: "HIGH", Severity: severity.High, Evidence: "Bearer FAKE_TOKEN_DO_NOT_USE_1234567890"},
 		},
 		RedactFindingText: true,
@@ -40,6 +40,11 @@ func TestBuildSortsFindingsAndRedactsEvidence(t *testing.T) {
 	}
 	if strings.Contains(r.Findings[0].Evidence, "FAKE_TOKEN_DO_NOT_USE_1234567890") {
 		t.Fatalf("secret leaked in finding evidence: %s", r.Findings[0].Evidence)
+	}
+	for _, finding := range r.Findings {
+		if strings.Contains(finding.SuppressionReason, "FAKE_TOKEN_DO_NOT_USE_1234567890") {
+			t.Fatalf("secret leaked in suppression reason: %s", finding.SuppressionReason)
+		}
 	}
 	if strings.Contains(r.Tools[0].DescriptionExcerpt, "FAKE_TOKEN_DO_NOT_USE_1234567890") {
 		t.Fatalf("secret leaked in tool excerpt: %s", r.Tools[0].DescriptionExcerpt)
@@ -83,6 +88,14 @@ func TestBuildCreatesStableFingerprintsFromRedactedEvidence(t *testing.T) {
 	}
 	if strings.Contains(first.Findings[0].Fingerprint, secret) {
 		t.Fatalf("fingerprint must not contain raw secret: %s", first.Findings[0].Fingerprint)
+	}
+}
+
+func TestDeduplicateFindingsUsesStableFingerprint(t *testing.T) {
+	finding := Finding{ID: "AG-TEST", Category: "test", Severity: severity.High, Location: "tools[x]", Evidence: "same"}
+	got := DeduplicateFindings([]Finding{finding, finding})
+	if len(got) != 1 || got[0].Fingerprint == "" {
+		t.Fatalf("expected one fingerprinted finding, got %#v", got)
 	}
 }
 

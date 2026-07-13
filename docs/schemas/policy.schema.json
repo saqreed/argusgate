@@ -16,7 +16,7 @@
     "defaults": {
       "type": "object",
       "properties": {
-        "fail_on": { "$ref": "#/$defs/severity" },
+        "fail_on": { "$ref": "#/$defs/failSeverity" },
         "allowed_severity": { "$ref": "#/$defs/severity" },
         "allow_unknown_tools": { "type": "boolean" }
       },
@@ -38,6 +38,8 @@
         },
         "suppressions": {
           "type": "array",
+          "maxItems": 1024,
+          "uniqueItems": true,
           "items": { "$ref": "#/$defs/suppression" }
         }
       },
@@ -60,9 +62,14 @@
       "type": "string",
       "enum": ["info", "low", "medium", "high", "critical"]
     },
+    "failSeverity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
     "stringList": {
       "type": "array",
-      "items": { "type": "string" }
+      "maxItems": 1024,
+      "items": { "type": "string", "minLength": 1 }
     },
     "suppression": {
       "type": "object",
@@ -75,5 +82,23 @@
       "additionalProperties": false
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "version": { "const": "0.1" } },
+        "required": ["version"]
+      },
+      "then": {
+        "not": {
+          "properties": {
+            "rules": {
+              "required": ["suppressions"]
+            }
+          },
+          "required": ["rules"]
+        }
+      }
+    }
+  ],
   "additionalProperties": false
 }

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+
+	"github.com/saqreed/argusgate/argusgate/internal/redact"
 )
 
 func JSONBytes(r Report) ([]byte, error) {
@@ -13,7 +15,7 @@ func JSONBytes(r Report) ([]byte, error) {
 
 func WriteTerminalSummary(w io.Writer, r Report) {
 	fmt.Fprintln(w, "ArgusGate scan summary")
-	fmt.Fprintf(w, "Source: %s (%s)\n", r.SourcePath, r.SourceType)
+	fmt.Fprintf(w, "Source: %s (%s)\n", redact.Terminal(r.SourcePath), redact.Terminal(r.SourceType))
 	fmt.Fprintf(w, "Servers: %d\n", len(r.Servers))
 	fmt.Fprintf(w, "Tools: %d\n", len(r.Tools))
 	fmt.Fprintf(w, "Findings: %d\n", countUnsuppressed(r.Findings))
@@ -44,12 +46,12 @@ func WriteTerminalSummary(w io.Writer, r Report) {
 			fmt.Fprintf(w, "... and %d more findings\n", totalUnsuppressed-shown)
 			break
 		}
-		fmt.Fprintf(w, "- [%s] %s (%s", finding.Severity, finding.Title, finding.ID)
+		fmt.Fprintf(w, "- [%s] %s (%s", finding.Severity, redact.Terminal(finding.Title), redact.Terminal(finding.ID))
 		if finding.ServerID != "" {
-			fmt.Fprintf(w, " server=%s", finding.ServerID)
+			fmt.Fprintf(w, " server=%s", redact.Terminal(finding.ServerID))
 		}
 		if finding.ToolName != "" {
-			fmt.Fprintf(w, " tool=%s", finding.ToolName)
+			fmt.Fprintf(w, " tool=%s", redact.Terminal(finding.ToolName))
 		}
 		fmt.Fprintln(w, ")")
 		shown++

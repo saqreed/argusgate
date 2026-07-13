@@ -82,7 +82,7 @@ var capabilityRules = []struct {
 		category: "dangerous-capability",
 		mapping:  "MCP04 Tool Metadata Poisoning / Sensitive Data Exposure",
 		patterns: []string{
-			"credential", "secret manager", "private key", "api key", "bearer token", "access token",
+			"read credentials", "manage credentials", "credential manager", "credential helper", "secret manager", "read secrets", "access secrets", "private key access", "retrieve api key", "rotate api key", "access token management",
 		},
 		explanation: "The tool appears to access credentials or secret material.",
 	},
@@ -126,7 +126,7 @@ var capabilityRules = []struct {
 		category: "dangerous-capability",
 		mapping:  "MCP02 Scope Creep / Excessive Permissions",
 		patterns: []string{
-			"aws", "gcloud", "az commands", "azure cli", "cloud accounts", "cloud resources",
+			"aws cli", "aws command", "aws s3", "aws iam", "gcloud", "az commands", "azure cli", "manage cloud accounts", "administer cloud resources",
 		},
 		explanation: "The tool appears able to invoke cloud provider CLIs or administer cloud resources.",
 	},
@@ -154,20 +154,27 @@ var capabilityRules = []struct {
 	},
 }
 
-func (d DangerousCapabilityDetector) ScanServer(mcp.ServerConfig) []report.Finding {
-	return nil
+func (d DangerousCapabilityDetector) ScanServer(server mcp.ServerConfig) []report.Finding {
+	return scanCapabilityBlobs(server.ID, "", mcp.ServerTextBlobs(server), mcp.ToolDefinition{})
 }
 
 func (d DangerousCapabilityDetector) ScanTool(tool mcp.ToolDefinition) []report.Finding {
+	return scanCapabilityBlobs(tool.ServerID, tool.Name, mcp.ToolTextBlobs(tool), tool)
+}
+
+func scanCapabilityBlobs(serverID, toolName string, blobs []mcp.TextBlob, tool mcp.ToolDefinition) []report.Finding {
 	var findings []report.Finding
 	seenRule := map[string]struct{}{}
-	for _, blob := range mcp.ToolTextBlobs(tool) {
+	for _, blob := range blobs {
 		lower := strings.ToLower(blob.Text)
 		for _, rule := range capabilityRules {
 			if _, ok := seenRule[rule.id]; ok {
 				continue
 			}
 			if rule.id == "AG-DC008" {
+				if toolName == "" {
+					continue
+				}
 				if !looksDatabaseRelated(tool, blob.Text) || !containsDatabaseWriteTerm(lower) {
 					continue
 				}
@@ -181,8 +188,8 @@ func (d DangerousCapabilityDetector) ScanTool(tool mcp.ToolDefinition) []report.
 				Severity:        rule.severity,
 				Category:        rule.category,
 				OWASPMCPMapping: rule.mapping,
-				ServerID:        tool.ServerID,
-				ToolName:        tool.Name,
+				ServerID:        serverID,
+				ToolName:        toolName,
 				Location:        blob.Location,
 				Evidence:        redact.Snippet(blob.Text, 180),
 				Explanation:     rule.explanation,

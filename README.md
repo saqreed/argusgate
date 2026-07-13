@@ -10,7 +10,7 @@ ArgusGate is experimental. It performs heuristic static analysis. It is not a co
 
 MCP servers can expose tools that read files, run commands, query databases, automate browsers, call APIs, and operate infrastructure. A malicious or compromised server can also hide instructions in tool descriptions or leak secrets through config and metadata.
 
-ArgusGate v0.2.0 focuses on a stronger CLI-first scanner: local offline scans, policy checks, controlled suppressions, stable finding fingerprints, JSON reports, SARIF output, and CI-ready exit codes.
+ArgusGate v0.2.5 focuses on a hardened CLI-first scanner: bounded local input parsing, strict policy checks, controlled suppressions, stable finding fingerprints, JSON reports, SARIF output, and CI-ready exit codes.
 
 ## Install From Release
 
@@ -21,16 +21,16 @@ Release archives are published for Linux, macOS, and Windows on `amd64` and `arm
 Linux or macOS:
 
 ```bash
-tar -xzf argusgate_v0.2.0_linux_amd64.tar.gz
-cd argusgate_v0.2.0_linux_amd64
+tar -xzf argusgate_v0.2.5_linux_amd64.tar.gz
+cd argusgate_v0.2.5_linux_amd64
 ./argusgate --version
 ```
 
 Windows PowerShell:
 
 ```powershell
-Expand-Archive .\argusgate_v0.2.0_windows_amd64.zip
-cd .\argusgate_v0.2.0_windows_amd64\argusgate_v0.2.0_windows_amd64
+Expand-Archive .\argusgate_v0.2.5_windows_amd64.zip
+cd .\argusgate_v0.2.5_windows_amd64\argusgate_v0.2.5_windows_amd64
 .\argusgate.exe --version
 ```
 
@@ -205,7 +205,7 @@ Example shape:
 ```json
 {
   "scanned_at": "2026-05-22T12:00:00Z",
-  "argusgate_version": "0.2.0",
+  "argusgate_version": "0.2.5",
   "source_type": "fixtures",
   "source_path": "examples/fixtures/malicious-tools.yaml",
   "servers": [],
@@ -254,7 +254,7 @@ Example GitHub Actions snippet:
 
 - name: Upload ArgusGate SARIF
   if: always()
-  uses: github/codeql-action/upload-sarif@v3
+  uses: github/codeql-action/upload-sarif@641a925cfafe92d0fdf8b239ba4053e3f8d99d6d # v3
   with:
     sarif_file: argusgate.sarif
 ```
@@ -266,7 +266,7 @@ Example GitHub Actions step:
 ```yaml
 - name: ArgusGate fixture scan
   run: |
-go run ./cmd/argusgate fixtures scan \
+    go run ./cmd/argusgate fixtures scan \
       --path examples/fixtures/malicious-tools.yaml \
       --policy examples/policies/default.yaml \
       --report argusgate-report.json
@@ -275,7 +275,8 @@ go run ./cmd/argusgate fixtures scan \
 The repository CI runs:
 
 ```bash
-go test ./...
+go mod verify
+go test -race ./...
 go vet ./...
 mkdir -p bin && go build -o ./bin/argusgate ./cmd/argusgate
 ```
@@ -286,7 +287,9 @@ mkdir -p bin && go build -o ./bin/argusgate ./cmd/argusgate
 - Findings can include false positives.
 - The scanner does not connect to live MCP servers.
 - The scanner does not execute tool commands or invoke MCP tools.
-- No runtime proxy/gateway is implemented in v0.2.0.
+- Input files are limited to 16 MiB, policies to 1 MiB, and reports to 10,000 retained findings per scan.
+- Strict policy parsing rejects unknown fields, empty rule entries, ambiguous normalized keys, and unsupported v0.1 suppressions.
+- No runtime proxy/gateway is implemented in v0.2.5.
 - No database, web UI, OAuth/RBAC, Kubernetes deployment, or SaaS workflow is included.
 
 ## Roadmap

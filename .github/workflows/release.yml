@@ -17,18 +17,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.24.x"
 
+      - name: Verify modules
+        run: go mod verify
+
       - name: Test
-        run: go test ./...
+        run: go test -mod=readonly ./...
 
       - name: Vet
-        run: go vet ./...
+        run: go vet -mod=readonly ./...
 
       - name: Verify release metadata
         shell: bash
@@ -72,10 +75,10 @@ jobs:
             archive: zip
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.24.x"
 
@@ -98,7 +101,7 @@ jobs:
           workdir="$(mktemp -d)"
           mkdir -p "dist" "$workdir/$package"
 
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$workdir/$package/$binary" ./cmd/argusgate
+          CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w" -o "$workdir/$package/$binary" ./cmd/argusgate
           if [ "$GOOS" = "linux" ] && [ "$GOARCH" = "amd64" ]; then
             "$workdir/$package/$binary" --version | grep -q "argusgate version ${VERSION#v}"
           fi
@@ -111,11 +114,12 @@ jobs:
           fi
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: argusgate-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
           if-no-files-found: error
+          retention-days: 7
 
   release:
     needs: build
@@ -124,10 +128,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Download packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: release-input
 
@@ -138,8 +142,8 @@ jobs:
           mkdir -p release
           find release-input -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} release/ \;
           asset_count="$(find release -type f \( -name '*.tar.gz' -o -name '*.zip' \) | wc -l | tr -d ' ')"
-          if [ "$asset_count" -eq 0 ]; then
-            echo "no release assets found" >&2
+          if [ "$asset_count" -ne 6 ]; then
+            echo "expected 6 release assets, found $asset_count" >&2
             exit 1
           fi
           (cd release && sha256sum argusgate_* | sort -k2 > SHA256SUMS.txt)

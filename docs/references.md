@@ -39,5 +39,12 @@ Design influence: kept malicious examples focused on tool poisoning patterns and
 - GitHub CLI in workflows: https://docs.github.com/actions/using-workflows/using-github-cli-in-workflows
 - GITHUB_TOKEN authentication and permissions: https://docs.github.com/actions/reference/authentication-in-a-workflow
 - Workflow artifacts: https://docs.github.com/en/actions/tutorials/store-and-share-data
+- Secure use reference: https://docs.github.com/en/actions/reference/security/secure-use
 
-Design influence: implemented tag-driven release archives with the preinstalled GitHub CLI, scoped workflow permissions, artifact passing between jobs, and checksum publication without adding third-party release actions.
+Design influence: implemented tag-driven release archives with the preinstalled GitHub CLI, scoped workflow permissions, artifact passing between jobs, checksum publication, and full-length commit SHA pinning for referenced actions.
+
+## Go Vulnerability Management
+
+- govulncheck command: https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck
+
+Design influence: release hardening includes reachable-vulnerability analysis in addition to module checksum verification, tests, and `go vet`.

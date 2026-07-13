@@ -1,6 +1,9 @@
 package mcp
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 type Document struct {
 	SourcePath string
@@ -89,18 +92,43 @@ func flattenStrings(location string, value any, out *[]TextBlob) {
 			flattenStrings(fmt.Sprintf("%s[%d]", location, i), item, out)
 		}
 	case map[string]string:
-		for key, item := range typed {
-			addBlob(out, location+"."+key+".key", key)
-			addBlob(out, location+"."+key, item)
+		for _, key := range sortedStringMapKeys(typed) {
+			addBlob(out, location+"."+key, fmt.Sprintf("%s=%q", key, typed[key]))
 		}
 	case map[string]any:
-		for key, item := range typed {
-			addBlob(out, location+"."+key+".key", key)
-			flattenStrings(location+"."+key, item, out)
+		for _, key := range sortedAnyMapKeys(typed) {
+			item := typed[key]
+			switch scalar := item.(type) {
+			case string:
+				addBlob(out, location+"."+key, fmt.Sprintf("%s=%q", key, scalar))
+			case bool, int, int64, uint64, float64:
+				addBlob(out, location+"."+key, fmt.Sprintf("%s=%v", key, scalar))
+			default:
+				addBlob(out, location+"."+key+".key", key)
+				flattenStrings(location+"."+key, item, out)
+			}
 		}
 	case bool, int, int64, float64:
 		addBlob(out, location, fmt.Sprint(typed))
 	default:
 		addBlob(out, location, fmt.Sprint(typed))
 	}
+}
+
+func sortedStringMapKeys(value map[string]string) []string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedAnyMapKeys(value map[string]any) []string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }

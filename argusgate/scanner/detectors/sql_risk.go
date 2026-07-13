@@ -18,6 +18,9 @@ var (
 	dbWriteRX            = regexp.MustCompile(`(?i)\b(drop|delete|update|insert|alter|truncate|merge|create|grant|revoke)\b|copy\s+.+\s+to\s+program|xp_cmdshell|load_extension|sys_eval`)
 	sqlNegativeContextRX = regexp.MustCompile(`(?i)\b(read[- ]only|select[- ]only|does not support|not support|no write|without write|without modifying|blocks?|rejects?|forbids?|disallows?|prohibits?|prevents?)\b`)
 	sqlPositiveContextRX = regexp.MustCompile(`(?i)\b(can|may|supports?|allows?|executes?|runs?|write[- ]capable|admin)\b[^.]{0,120}\b(drop|delete|update|insert|alter|truncate|merge|create|grant|revoke)\b`)
+	sqlWriteSyntaxRX     = regexp.MustCompile(`(?i)\b(update\s+[A-Za-z0-9_."` + "`" + `\[\]-]+\s+set|delete\s+from|insert\s+into|drop\s+(table|database|schema)|alter\s+(table|database|schema)|truncate\s+table|merge\s+into|create\s+(table|database|schema)|grant\s+.+\s+to|revoke\s+.+\s+from)\b`)
+	sqlWriteListRX       = regexp.MustCompile(`(?i)\b(run|execute|support|allow|including|statements?|operations?|write|admin)\w*\b[^.]{0,160}\b(drop|delete|update|insert|alter|truncate|merge|create|grant|revoke)\b`)
+	sqlExtensionRX       = regexp.MustCompile(`(?i)copy\s+.+\s+to\s+program|xp_cmdshell|load_extension|sys_eval`)
 )
 
 func (d SQLRiskDetector) ScanServer(mcp.ServerConfig) []report.Finding {
@@ -95,7 +98,11 @@ func containsDatabaseWriteRisk(text string) bool {
 
 func containsWriteRisk(text string, rx *regexp.Regexp) bool {
 	for _, loc := range rx.FindAllStringIndex(text, -1) {
-		if !isWriteMentionNegated(text, loc) {
+		if isWriteMentionNegated(text, loc) {
+			continue
+		}
+		sentence := sentenceAround(text, loc)
+		if sqlExtensionRX.MatchString(sentence) || sqlWriteSyntaxRX.MatchString(sentence) || sqlPositiveContextRX.MatchString(sentence) || sqlWriteListRX.MatchString(sentence) {
 			return true
 		}
 	}

@@ -3,6 +3,7 @@ package policy
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -152,6 +153,16 @@ func TestPolicyPathRulesMatchWindowsDrivePaths(t *testing.T) {
 	}
 }
 
+func TestAllowedPathIgnoresSentencePunctuation(t *testing.T) {
+	p := Default()
+	p.Rules.Paths.Allow = []string{"./examples"}
+	tool := mcp.ToolDefinition{ServerID: "s1", Name: "read_file", Description: "Read only under ./examples."}
+	findings := EvaluateTools(p, []mcp.ToolDefinition{tool})
+	if hasFinding(findings, "AG-POL005") {
+		t.Fatalf("sentence punctuation must not change path prefix matching: %#v", findings)
+	}
+}
+
 func TestAllowedSeverityControlsDefaultFailOn(t *testing.T) {
 	path := writePolicy(t, `
 version: "0.1"
@@ -285,11 +296,74 @@ func TestApplySuppressionsReportsExpiredSuppressions(t *testing.T) {
 	}
 }
 
+func TestApplySuppressionsCannotSuppressScannerLimit(t *testing.T) {
+	fingerprint := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	p := Default()
+	p.Version = "0.2"
+	p.Rules.Suppressions = []Suppression{{Fingerprint: fingerprint, Reason: "must not apply"}}
+	findings := []report.Finding{{ID: "AG-SCAN001", Severity: severity.Critical, Fingerprint: fingerprint}}
+
+	out := ApplySuppressions(p, findings, time.Now().UTC())
+	if len(out) != 1 || out[0].Suppressed {
+		t.Fatalf("scanner limit must remain unsuppressed: %#v", out)
+	}
+	if decision := DecideExit(p, out); decision.ExitCode != 1 {
+		t.Fatalf("scanner limit must fail the scan: %#v", decision)
+	}
+}
+
 func TestDecideExit(t *testing.T) {
 	p := Default()
 	decision := DecideExit(p, nil)
 	if decision.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %#v", decision)
+	}
+}
+
+func TestSummarizeRedactsProjectName(t *testing.T) {
+	p := Default()
+	p.Project.Name = "token=FAKE_TOKEN_DO_NOT_USE_1234567890"
+	if summary := Summarize(p); strings.Contains(summary.Name, "FAKE_TOKEN_DO_NOT_USE_1234567890") {
+		t.Fatalf("project name leaked through policy summary: %#v", summary)
+	}
+}
+
+func TestLoadFileRejectsUnknownAndCollidingKeys(t *testing.T) {
+	unknown := writePolicy(t, "version: '0.2'\nrules:\n  deny_toolz: [shell_exec]\n")
+	if _, err := LoadFile(unknown); err == nil || !strings.Contains(err.Error(), "field deny_toolz not found") {
+		t.Fatalf("expected unknown field error, got %v", err)
+	}
+
+	collision := writePolicy(t, "version: '0.2'\ndefaults:\n  fail-on: high\n  fail_on: medium\n")
+	if _, err := LoadFile(collision); err == nil || !strings.Contains(err.Error(), "normalize to the same field") {
+		t.Fatalf("expected normalized key collision, got %v", err)
+	}
+}
+
+func TestLoadFileRejectsUnsafePolicyAmbiguity(t *testing.T) {
+	cases := []string{
+		"defaults:\n  fail_on: high\n",
+		"version: '0.2'\ndefaults:\n  fail_on: info\n",
+		"version: '0.1'\nrules:\n  suppressions:\n    - fingerprint: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n      reason: not supported\n",
+		"version: '0.2'\nrules:\n  deny_tools: ['']\n",
+		"version: '0.2'\nrules:\n  suppressions:\n    - fingerprint: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n      reason: first\n    - fingerprint: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n      reason: second\n",
+		"version: '0.2'\n---\nversion: '0.2'\n",
+		"version: '0.2'\nrules:\n  1: value\n",
+	}
+	for _, content := range cases {
+		if _, err := LoadFile(writePolicy(t, content)); err == nil {
+			t.Fatalf("expected policy error for:\n%s", content)
+		}
+	}
+}
+
+func TestLoadFileRejectsOversizedPolicy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large-policy.yaml")
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", int(MaxPolicyBytes)+1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadFile(path); err == nil || !strings.Contains(err.Error(), "maximum") {
+		t.Fatalf("expected size limit error, got %v", err)
 	}
 }
 

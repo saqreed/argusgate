@@ -13,6 +13,7 @@ ArgusGate is currently a CLI-first Go project. The MVP is intentionally offline 
 - `argusgate/scanner/severity`: severity ordering and threshold logic.
 - `argusgate/report`: JSON report model, stable finding fingerprints, terminal summary renderer, and SARIF renderer.
 - `argusgate/internal/redact`: secret redaction helpers.
+- `argusgate/internal/fileio`: bounded regular-file reads and private atomic report writes.
 
 ## Data Flow
 
@@ -33,7 +34,7 @@ flowchart LR
 
 ## MVP Runtime Behavior
 
-The scanner reads local files, parses server and tool metadata, applies detectors, applies policy rules, assigns stable finding fingerprints, applies policy suppressions, redacts secret-like evidence, writes optional JSON and SARIF reports, and exits with a CI-friendly code.
+The scanner reads size-bounded regular local files, validates server and tool shapes, applies detectors and policy rules, assigns stable finding fingerprints, applies policy suppressions, redacts secret-like evidence, atomically writes optional JSON and SARIF reports, and exits with a CI-friendly code.
 
 It does not execute commands from MCP configs. It does not connect to external services. It does not call tools.
 
@@ -53,7 +54,7 @@ The detector rule registry gives each rule a stable ID, severity, category, OWAS
 
 ## Release Pipeline
 
-The CI workflow runs tests, vet, and a Linux CLI build on pushes and pull requests. The release workflow runs on version tags, repeats test and vet checks, cross-compiles static CLI binaries for Linux, macOS, and Windows, packages release archives, generates `SHA256SUMS.txt`, and publishes a GitHub prerelease with the generated assets.
+The CI workflow verifies modules, runs race-enabled tests and vet, and builds the Linux CLI on pushes and pull requests. GitHub Actions are pinned to commit SHAs. The release workflow runs on version tags, repeats test and vet checks, cross-compiles static CLI binaries for Linux, macOS, and Windows, requires all six archives, generates `SHA256SUMS.txt`, and publishes a GitHub prerelease with the generated assets.
 
 ## Future Gateway Shape
 

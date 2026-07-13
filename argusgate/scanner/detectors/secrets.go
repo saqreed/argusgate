@@ -2,6 +2,7 @@ package detectors
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/saqreed/argusgate/argusgate/internal/redact"
 	"github.com/saqreed/argusgate/argusgate/mcp"
@@ -20,7 +21,7 @@ var secretPatterns = []struct {
 	{"AG-SE001", "Bearer token found in metadata", regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._~+/=-]{8,}`), "high"},
 	{"AG-SE009", "Basic authorization value found in metadata", regexp.MustCompile(`(?i)Basic\s+[A-Za-z0-9+/=]{8,}`), "high"},
 	{"AG-SE002", "Secret-like key/value found in metadata", regexp.MustCompile(`(?i)(api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization)\s*[:=]\s*["']?[^"'\s,;]{4,}`), "medium"},
-	{"AG-SE003", "Private key block found in metadata", regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`), "high"},
+	{"AG-SE003", "Private key block found in metadata", regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)`), "high"},
 	{"AG-SE004", "Connection string found in metadata", regexp.MustCompile(`(?i)(postgres|postgresql|mysql|mongodb|redis|amqp)://[^\s"']+`), "high"},
 	{"AG-SE005", "JWT-like token found in metadata", regexp.MustCompile(`eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`), "medium"},
 	{"AG-SE006", "GitHub token-like value found in metadata", regexp.MustCompile(`\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b`), "high"},
@@ -31,6 +32,8 @@ var secretPatterns = []struct {
 	{"AG-SE012", "npm token-like value found in metadata", regexp.MustCompile(`\bnpm_[A-Za-z0-9_-]{20,}\b`), "high"},
 	{"AG-SE013", "PyPI token-like value found in metadata", regexp.MustCompile(`\bpypi-[A-Za-z0-9_-]{20,}\b`), "high"},
 	{"AG-SE014", "Google API key-like value found in metadata", regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{20,}\b`), "high"},
+	{"AG-SE015", "GitLab token-like value found in metadata", regexp.MustCompile(`\bglpat-[A-Za-z0-9_-]{20,}\b`), "high"},
+	{"AG-SE016", "Secret-like command-line argument found in metadata", regexp.MustCompile(`(?i)--(?:api[_-]?key|token|password|passwd|secret|authorization|access[_-]?token)\s+[^\s,;]{4,}`), "high"},
 }
 
 func (d SecretExposureDetector) ScanServer(server mcp.ServerConfig) []report.Finding {
@@ -52,8 +55,11 @@ func (d SecretExposureDetector) ScanTool(tool mcp.ToolDefinition) []report.Findi
 func secretFindings(serverID, toolName, location, text string) []report.Finding {
 	var findings []report.Finding
 	for _, pattern := range secretPatterns {
-		matches := pattern.rx.FindAllString(text, -1)
+		matches := pattern.rx.FindAllString(text, 100)
 		for _, match := range matches {
+			if (pattern.id == "AG-SE002" || pattern.id == "AG-SE016") && looksLikeSecretPlaceholder(match) {
+				continue
+			}
 			findings = append(findings, report.Finding{
 				ID:              pattern.id,
 				Title:           pattern.title,
@@ -71,4 +77,37 @@ func secretFindings(serverID, toolName, location, text string) []report.Finding 
 		}
 	}
 	return findings
+}
+
+func looksLikeSecretPlaceholder(match string) bool {
+	separator := strings.IndexAny(match, ":=")
+	var value string
+	if separator == -1 {
+		fields := strings.Fields(match)
+		if len(fields) < 2 {
+			return false
+		}
+		value = fields[len(fields)-1]
+	} else {
+		value = match[separator+1:]
+	}
+	value = strings.Trim(strings.TrimSpace(value), `"'`)
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(value, "${") && strings.HasSuffix(value, "}") {
+		return true
+	}
+	if strings.HasPrefix(value, "$") && !strings.ContainsAny(value, " /\\") {
+		return true
+	}
+	if strings.HasPrefix(value, "{{") && strings.HasSuffix(value, "}}") {
+		return true
+	}
+	if strings.HasPrefix(value, "<") && strings.HasSuffix(value, ">") {
+		return true
+	}
+	switch lower {
+	case "true", "false", "null", "string", "number", "object", "array", "replace_me", "changeme", "your_token", "your_api_key", "your_password":
+		return true
+	}
+	return false
 }

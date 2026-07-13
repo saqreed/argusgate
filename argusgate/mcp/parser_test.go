@@ -3,6 +3,7 @@ package mcp
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -148,6 +149,58 @@ tools:
 `)
 	if _, err := LoadFixtures(path); err == nil {
 		t.Fatal("expected invalid tool shape error")
+	}
+}
+
+func TestLoadDocumentRejectsEmptyRecognizedContent(t *testing.T) {
+	if _, err := LoadFixtures(writeTempFile(t, `description: typo`)); err == nil {
+		t.Fatal("expected fixture without tools to fail")
+	}
+	if _, err := LoadConfig(writeTempFile(t, `mcpServer: {}`)); err == nil {
+		t.Fatal("expected config without servers to fail")
+	}
+}
+
+func TestLoadDocumentRejectsMissingNamesAndDuplicates(t *testing.T) {
+	missingName := writeTempFile(t, "tools:\n  - description: missing name\n")
+	if _, err := LoadFixtures(missingName); err == nil || !strings.Contains(err.Error(), "name is required") {
+		t.Fatalf("expected missing tool name error, got %v", err)
+	}
+
+	duplicate := writeTempFile(t, "tools:\n  - name: read_file\n  - name: READ_FILE\n")
+	if _, err := LoadFixtures(duplicate); err == nil || !strings.Contains(err.Error(), "duplicate tool") {
+		t.Fatalf("expected duplicate tool error, got %v", err)
+	}
+}
+
+func TestLoadDocumentRejectsInvalidKnownFieldType(t *testing.T) {
+	path := writeTempFile(t, "mcpServers:\n  local:\n    command: 42\n")
+	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "command: expected string") {
+		t.Fatalf("expected field type error, got %v", err)
+	}
+}
+
+func TestLoadDocumentRejectsMultipleYAMLDocuments(t *testing.T) {
+	path := writeTempFile(t, "tools:\n  - name: first\n---\ntools:\n  - name: second\n")
+	if _, err := LoadFixtures(path); err == nil || !strings.Contains(err.Error(), "multiple YAML documents") {
+		t.Fatalf("expected multiple document error, got %v", err)
+	}
+}
+
+func TestLoadDocumentRejectsNonStringMappingKeys(t *testing.T) {
+	path := writeTempFile(t, "tools:\n  1:\n    description: numeric key\n")
+	if _, err := LoadFixtures(path); err == nil || !strings.Contains(err.Error(), "mapping keys must be strings") {
+		t.Fatalf("expected mapping key error, got %v", err)
+	}
+}
+
+func TestLoadDocumentRejectsOversizedInput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large.yaml")
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", int(MaxDocumentBytes)+1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadFixtures(path); err == nil || !strings.Contains(err.Error(), "maximum") {
+		t.Fatalf("expected size limit error, got %v", err)
 	}
 }
 

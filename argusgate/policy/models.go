@@ -1,6 +1,9 @@
 package policy
 
-import "github.com/saqreed/argusgate/argusgate/scanner/severity"
+import (
+	"github.com/saqreed/argusgate/argusgate/internal/redact"
+	"github.com/saqreed/argusgate/argusgate/scanner/severity"
+)
 
 type Policy struct {
 	Version    string                `json:"version" yaml:"version"`
@@ -79,7 +82,7 @@ func Default() Policy {
 
 func Summarize(p Policy) Summary {
 	return Summary{
-		Name:              p.Project.Name,
+		Name:              redact.Text(p.Project.Name),
 		Version:           p.Version,
 		FailOn:            p.Defaults.FailOn,
 		AllowUnknownTools: p.Defaults.AllowUnknownTools,

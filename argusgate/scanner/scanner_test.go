@@ -121,6 +121,14 @@ func TestScanAppliesPolicySuppressionsToExitDecision(t *testing.T) {
 	}
 }
 
+func TestAppendLimitedCapsFindings(t *testing.T) {
+	findings := make([]report.Finding, MaxFindings-1)
+	truncated := appendLimited(&findings, []report.Finding{{ID: "one"}, {ID: "two"}})
+	if !truncated || len(findings) != MaxFindings || findings[len(findings)-1].ID != "one" {
+		t.Fatalf("unexpected limit result: truncated=%v len=%d last=%#v", truncated, len(findings), findings[len(findings)-1])
+	}
+}
+
 func reportHasFinding(r report.Report, id string) bool {
 	for _, finding := range r.Findings {
 		if finding.ID == id {
