@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/saqreed/argusgate/argusgate/baseline"
 	"github.com/saqreed/argusgate/argusgate/mcp"
 	"github.com/saqreed/argusgate/argusgate/policy"
 	"github.com/saqreed/argusgate/argusgate/report"
@@ -11,27 +12,64 @@ import (
 	"github.com/saqreed/argusgate/argusgate/scanner/severity"
 )
 
-const Version = "0.2.5"
+const Version = "0.3.0"
 const MaxFindings = 10000
 
+type Options struct {
+	Baseline     *baseline.File
+	BaselinePath string
+}
+
 func ScanFixtures(path string, p policy.Policy) (report.Report, error) {
+	return ScanFixturesWithOptions(path, p, Options{})
+}
+
+func ScanFixturesWithOptions(path string, p policy.Policy, options Options) (report.Report, error) {
 	doc, err := mcp.LoadFixtures(path)
 	if err != nil {
 		return report.Report{}, err
 	}
-	return ScanDocument("fixtures", doc, p), nil
+	return ScanDocumentWithOptions("fixtures", doc, p, options)
 }
 
 func ScanConfig(path string, p policy.Policy) (report.Report, error) {
+	return ScanConfigWithOptions(path, p, Options{})
+}
+
+func ScanConfigWithOptions(path string, p policy.Policy, options Options) (report.Report, error) {
 	doc, err := mcp.LoadConfig(path)
 	if err != nil {
 		return report.Report{}, err
 	}
-	return ScanDocument("config", doc, p), nil
+	return ScanDocumentWithOptions("config", doc, p, options)
 }
 
 func ScanDocument(sourceType string, doc mcp.Document, p policy.Policy) report.Report {
+	return scanDocument(sourceType, doc, p, time.Now().UTC(), nil, nil)
+}
+
+func ScanDocumentWithOptions(sourceType string, doc mcp.Document, p policy.Policy, options Options) (report.Report, error) {
 	scannedAt := time.Now().UTC()
+	var baselineFindings []report.Finding
+	var baselineSummary any
+	if options.Baseline != nil {
+		current, err := baseline.Create(doc, Version, scannedAt)
+		if err != nil {
+			return report.Report{}, fmt.Errorf("create current baseline state: %w", err)
+		}
+		baselineFindings, baselineSummary = baseline.Compare(*options.Baseline, current, options.BaselinePath)
+	}
+	return scanDocument(sourceType, doc, p, scannedAt, baselineFindings, baselineSummary), nil
+}
+
+func scanDocument(
+	sourceType string,
+	doc mcp.Document,
+	p policy.Policy,
+	scannedAt time.Time,
+	baselineFindings []report.Finding,
+	baselineSummary any,
+) report.Report {
 	var findings []report.Finding
 	truncated := false
 
@@ -43,8 +81,8 @@ scanLoop:
 				break scanLoop
 			}
 		}
-		for _, tool := range doc.Tools {
-			if appendLimited(&findings, detector.ScanTool(tool)) {
+		for _, artifact := range mcp.DocumentArtifacts(doc) {
+			if appendLimited(&findings, detector.ScanArtifact(artifact)) {
 				truncated = true
 				break scanLoop
 			}
@@ -54,7 +92,10 @@ scanLoop:
 	if !truncated && appendLimited(&findings, policy.EvaluateServers(p, doc.Servers)) {
 		truncated = true
 	}
-	if !truncated && appendLimited(&findings, policy.EvaluateTools(p, doc.Tools)) {
+	if !truncated && appendLimited(&findings, policy.EvaluateArtifacts(p, mcp.DocumentArtifacts(doc))) {
+		truncated = true
+	}
+	if !truncated && appendLimited(&findings, baselineFindings) {
 		truncated = true
 	}
 	if truncated {
@@ -80,10 +121,15 @@ scanLoop:
 		Version:           Version,
 		SourceType:        sourceType,
 		SourcePath:        doc.SourcePath,
+		ProtocolVersion:   doc.ProtocolVersion,
 		Servers:           doc.Servers,
 		Tools:             doc.Tools,
+		Prompts:           doc.Prompts,
+		Resources:         doc.Resources,
+		ResourceTemplates: doc.ResourceTemplates,
 		Findings:          findings,
 		PolicySummary:     policy.Summarize(p),
+		BaselineSummary:   baselineSummary,
 		ExitDecision:      decision,
 		RedactFindingText: true,
 	})

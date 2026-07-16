@@ -22,16 +22,22 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: "1.24.x"
+          go-version: "1.25.x"
 
       - name: Verify modules
         run: go mod verify
 
       - name: Test
-        run: go test -mod=readonly ./...
+        run: go test -mod=readonly -race ./...
 
       - name: Vet
         run: go vet -mod=readonly ./...
+
+      - name: Check reachable vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+      - name: Lint GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -no-color
 
       - name: Verify release metadata
         shell: bash
@@ -80,7 +86,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: "1.24.x"
+          go-version: "1.25.x"
 
       - name: Build package
         shell: bash
@@ -99,13 +105,14 @@ jobs:
           fi
 
           workdir="$(mktemp -d)"
-          mkdir -p "dist" "$workdir/$package"
+          mkdir -p "dist" "$workdir/$package/docs"
 
           CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags="-s -w" -o "$workdir/$package/$binary" ./cmd/argusgate
           if [ "$GOOS" = "linux" ] && [ "$GOARCH" = "amd64" ]; then
             "$workdir/$package/$binary" --version | grep -q "argusgate version ${VERSION#v}"
           fi
           cp README.md LICENSE CHANGELOG.md "$workdir/$package/"
+          cp -R docs/schemas "$workdir/$package/docs/"
 
           if [ "$ARCHIVE" = "zip" ]; then
             (cd "$workdir" && zip -qr "$GITHUB_WORKSPACE/dist/${package}.zip" "$package")

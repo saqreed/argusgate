@@ -20,11 +20,14 @@ Include:
 
 | Version | Support |
 | --- | --- |
-| `0.2.x` | Best-effort security fixes |
+| `0.3.x` | Best-effort security fixes |
+| `0.2.x` | Critical fixes only |
 | `0.1.x` | Unsupported |
 
 ## Scanner Safety Scope
 
-The MVP scanner reads local config and fixture files. It must not execute MCP server commands, call tools, or connect to external services during local scans.
+Local config and fixture scans must not execute MCP server commands, call tools, or connect to external services.
 
 If you find behavior that violates this offline scanning model, treat it as security-sensitive.
+
+The explicit `inspect` command may connect only to the user-selected HTTPS endpoint and may perform initialization and metadata list requests. Redirects, cross-origin requests, tool calls, prompt retrieval, resource reads, and command execution are outside its security contract.

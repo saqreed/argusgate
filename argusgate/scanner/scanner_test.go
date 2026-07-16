@@ -5,7 +5,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
+	"github.com/saqreed/argusgate/argusgate/baseline"
+	"github.com/saqreed/argusgate/argusgate/mcp"
 	"github.com/saqreed/argusgate/argusgate/policy"
 	"github.com/saqreed/argusgate/argusgate/report"
 	"github.com/saqreed/argusgate/argusgate/scanner/severity"
@@ -118,6 +121,37 @@ func TestScanAppliesPolicySuppressionsToExitDecision(t *testing.T) {
 	}
 	if !hasSuppressedFinding(r, target) {
 		t.Fatalf("expected suppressed finding %s, got %#v", target, r.Findings)
+	}
+}
+
+func TestScanWithBaselineDetectsMetadataDrift(t *testing.T) {
+	doc, err := mcp.LoadFixtures(repoPath(t, "examples", "fixtures", "safe-tools.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewed, err := baseline.Create(doc, Version, time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unchanged, err := ScanDocumentWithOptions("fixtures", doc, policy.Default(), Options{Baseline: &reviewed, BaselinePath: "baseline.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reportHasFinding(unchanged, "AG-BASE001") || reportHasFinding(unchanged, "AG-BASE002") {
+		t.Fatalf("unchanged metadata produced drift: %#v", unchanged.Findings)
+	}
+
+	doc.Tools[0].Description = "Changed metadata contract."
+	changed, err := ScanDocumentWithOptions("fixtures", doc, policy.Default(), Options{Baseline: &reviewed, BaselinePath: "baseline.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reportHasFinding(changed, "AG-BASE002") {
+		t.Fatalf("changed metadata did not produce drift: %#v", changed.Findings)
+	}
+	decision, ok := changed.ExitDecision.(policy.ExitDecision)
+	if !ok || decision.ExitCode != 1 {
+		t.Fatalf("drift should fail at the default threshold: %#v", changed.ExitDecision)
 	}
 }
 

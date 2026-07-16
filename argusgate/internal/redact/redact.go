@@ -34,6 +34,7 @@ var redactors = []rule{
 }
 
 var ansiEscapeRX = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+var sensitiveKeyRX = regexp.MustCompile(`(?i)(^|[_-])(api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token|credential)s?($|[_-])`)
 
 func Text(value string) string {
 	result := value
@@ -41,6 +42,10 @@ func Text(value string) string {
 		result = redactor.rx.ReplaceAllString(result, redactor.replacement)
 	}
 	return result
+}
+
+func IsSensitiveKey(value string) bool {
+	return sensitiveKeyRX.MatchString(strings.TrimSpace(value))
 }
 
 func Snippet(value string, max int) string {

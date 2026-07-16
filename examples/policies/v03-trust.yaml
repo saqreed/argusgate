@@ -1,0 +1,40 @@
+version: "0.3"
+project:
+  name: "argusgate-v03-trust-example"
+defaults:
+  fail_on: "high"
+  allow_unknown_tools: true
+  allow_unknown_prompts: false
+  allow_unknown_resources: false
+rules:
+  allow_prompts:
+    - "review_release"
+  deny_prompts:
+    - "hidden_override"
+  deny_keywords:
+    - "ignore previous instructions"
+    - "do not tell the user"
+  paths:
+    deny:
+      - "~/.ssh"
+      - "/home/example/.ssh"
+  resource_uris:
+    allow:
+      - "https://docs.example.test/public"
+      - "file:///workspace/docs"
+    deny:
+      - "http://example.test"
+      - "file:///home/example/.ssh"
+servers:
+  metadata-demo:
+    allow_prompts:
+      - "review_release"
+    deny_prompts:
+      - "hidden_override"
+    resource_uris:
+      allow:
+        - "https://docs.example.test/public"
+        - "file:///workspace/docs"
+      deny:
+        - "http://example.test"
+        - "file:///home/example/.ssh"

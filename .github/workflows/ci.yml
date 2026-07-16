@@ -17,7 +17,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: "1.24.x"
+          go-version: "1.25.x"
 
       - name: Verify modules
         run: go mod verify
@@ -28,7 +28,39 @@ jobs:
       - name: Vet
         run: go vet -mod=readonly ./...
 
+      - name: Check reachable vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+      - name: Lint GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -no-color
+
       - name: Build CLI
         run: |
           mkdir -p bin
           go build -mod=readonly -trimpath -o ./bin/argusgate ./cmd/argusgate
+
+      - name: Smoke test composite action runner
+        shell: pwsh
+        env:
+          ARGUSGATE_BINARY: ${{ github.workspace }}/bin/argusgate
+          ARGUSGATE_SOURCE_TYPE: fixtures
+          ARGUSGATE_SOURCE: examples/fixtures/safe-tools.yaml
+          ARGUSGATE_POLICY: examples/policies/default.yaml
+          ARGUSGATE_BASELINE: ""
+          ARGUSGATE_FAIL_ON: high
+          ARGUSGATE_REPORT: ${{ runner.temp }}/argusgate-report.json
+          ARGUSGATE_SARIF: ${{ runner.temp }}/argusgate.sarif
+          ARGUSGATE_SERVER_ID: ""
+          ARGUSGATE_TIMEOUT: 15s
+          ARGUSGATE_TOKEN_ENV: ""
+        run: |
+          ./scripts/run-action.ps1
+          if (-not (Test-Path -LiteralPath $env:ARGUSGATE_REPORT -PathType Leaf)) {
+            throw "JSON report was not created"
+          }
+          if (-not (Test-Path -LiteralPath $env:ARGUSGATE_SARIF -PathType Leaf)) {
+            throw "SARIF report was not created"
+          }
+          if (-not (Select-String -LiteralPath $env:GITHUB_OUTPUT -Pattern '^exit-code=0$' -Quiet)) {
+            throw "Action runner did not capture exit code 0"
+          }

@@ -105,7 +105,7 @@ func TestSARIFBytesProducesSARIFReport(t *testing.T) {
 		SourcePath:       "fixtures.yaml",
 		Findings: []Finding{{
 			ID:              "AG-TP001",
-			Title:           "Suspicious tool instruction detected",
+			Title:           "Suspicious instruction detected in MCP metadata",
 			Severity:        severity.High,
 			Category:        "tool-poisoning",
 			OWASPMCPMapping: "MCP03 Tool Poisoning",

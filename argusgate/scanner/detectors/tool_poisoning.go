@@ -42,23 +42,25 @@ func (d ToolPoisoningDetector) ScanServer(mcp.ServerConfig) []report.Finding {
 }
 
 func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Finding {
+	return d.ScanArtifact(mcp.ArtifactFromTool(tool))
+}
+
+func (d ToolPoisoningDetector) ScanArtifact(artifact mcp.Artifact) []report.Finding {
 	var findings []report.Finding
-	for _, blob := range mcp.ToolTextBlobs(tool) {
+	for _, blob := range mcp.ArtifactTextBlobs(artifact) {
 		lower := strings.ToLower(blob.Text)
 		for _, phrase := range poisoningPhrases {
 			if strings.Contains(lower, phrase) {
 				findings = append(findings, report.Finding{
 					ID:              "AG-TP001",
-					Title:           "Suspicious tool instruction detected",
+					Title:           "Suspicious instruction detected in MCP metadata",
 					Severity:        severity.High,
 					Category:        "tool-poisoning",
 					OWASPMCPMapping: "MCP03 Tool Poisoning",
-					ServerID:        tool.ServerID,
-					ToolName:        tool.Name,
 					Location:        blob.Location,
 					Evidence:        redact.Snippet(blob.Text, 180),
-					Explanation:     "Tool metadata contains instruction-like text commonly associated with prompt injection or tool poisoning.",
-					Recommendation:  "Review the tool metadata, remove hidden or manipulative instructions, and only allow trusted MCP servers.",
+					Explanation:     "MCP metadata contains instruction-like text commonly associated with prompt injection or tool poisoning.",
+					Recommendation:  "Review the metadata, remove hidden or manipulative instructions, and only allow trusted MCP servers.",
 					Confidence:      "high",
 				})
 				break
@@ -68,16 +70,14 @@ func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Findin
 		for _, match := range markdownCommentRX.FindAllString(blob.Text, 100) {
 			findings = append(findings, report.Finding{
 				ID:              "AG-TP002",
-				Title:           "Hidden markdown or HTML comment in tool metadata",
+				Title:           "Hidden markdown or HTML comment in MCP metadata",
 				Severity:        severity.Medium,
 				Category:        "tool-poisoning",
 				OWASPMCPMapping: "MCP03 Tool Poisoning",
-				ServerID:        tool.ServerID,
-				ToolName:        tool.Name,
 				Location:        blob.Location,
 				Evidence:        redact.Snippet(match, 180),
-				Explanation:     "Hidden comments in tool descriptions can carry instructions that users do not see.",
-				Recommendation:  "Remove hidden comments from tool metadata or require manual review before allowing the tool.",
+				Explanation:     "Hidden comments in MCP metadata can carry instructions that reviewers do not see.",
+				Recommendation:  "Remove hidden comments or require manual review before allowing the metadata artifact.",
 				Confidence:      "medium",
 			})
 		}
@@ -95,16 +95,14 @@ func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Findin
 				if strings.Contains(decodedLower, phrase) {
 					findings = append(findings, report.Finding{
 						ID:              "AG-TP003",
-						Title:           "Suspicious base64-like payload in tool metadata",
+						Title:           "Suspicious base64-like payload in MCP metadata",
 						Severity:        severity.High,
 						Category:        "tool-poisoning",
 						OWASPMCPMapping: "MCP03 Tool Poisoning",
-						ServerID:        tool.ServerID,
-						ToolName:        tool.Name,
 						Location:        blob.Location,
 						Evidence:        redact.Snippet(decoded, 180),
 						Explanation:     "A base64-like metadata value decodes to suspicious instruction text.",
-						Recommendation:  "Remove encoded instructions and treat the tool as untrusted until reviewed.",
+						Recommendation:  "Remove encoded instructions and treat the metadata source as untrusted until reviewed.",
 						Confidence:      "medium",
 					})
 					break
@@ -115,19 +113,20 @@ func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Findin
 		if containsSuspiciousInvisibleCharacter(blob.Text) {
 			findings = append(findings, report.Finding{
 				ID:              "AG-TP004",
-				Title:           "Invisible control character in tool metadata",
+				Title:           "Invisible control character in MCP metadata",
 				Severity:        severity.Medium,
 				Category:        "tool-poisoning",
 				OWASPMCPMapping: "MCP03 Tool Poisoning",
-				ServerID:        tool.ServerID,
-				ToolName:        tool.Name,
 				Location:        blob.Location,
 				Evidence:        suspiciousInvisibleEvidence(blob.Text),
-				Explanation:     "Tool metadata contains invisible or zero-width characters that can hide instructions from reviewers.",
+				Explanation:     "MCP metadata contains invisible or zero-width characters that can hide instructions from reviewers.",
 				Recommendation:  "Remove invisible formatting characters from tool metadata and review the original source.",
 				Confidence:      "medium",
 			})
 		}
+	}
+	for i := range findings {
+		findings[i] = withArtifactIdentity(findings[i], artifact)
 	}
 	return findings
 }

@@ -79,6 +79,19 @@ func TestTerminalRemovesControlSequences(t *testing.T) {
 	}
 }
 
+func TestIsSensitiveKey(t *testing.T) {
+	for _, key := range []string{"password", "api_key", "access-token", "Authorization", "client_secret"} {
+		if !IsSensitiveKey(key) {
+			t.Fatalf("expected %q to be sensitive", key)
+		}
+	}
+	for _, key := range []string{"monkey", "keynote", "tokenizer", "description"} {
+		if IsSensitiveKey(key) {
+			t.Fatalf("did not expect %q to be sensitive", key)
+		}
+	}
+}
+
 func containsAny(text string, values []string) bool {
 	for _, value := range values {
 		for i := 0; i+len(value) <= len(text); i++ {

@@ -2,54 +2,52 @@
 
 ## Assets
 
-- Developer and CI machines that store MCP configs.
-- API tokens, SSH keys, cloud credentials, database credentials, and browser profiles.
-- Internal services exposed through MCP tools.
-- AI agent context and tool invocation results.
+- MCP client hosts and CI runners.
+- Credentials, private files, browser profiles, databases, cloud accounts, and infrastructure exposed through MCP servers.
+- Reviewed MCP metadata and policy decisions.
+- JSON/SARIF reports and baselines.
 
-## Primary Adversaries
+## Adversaries
 
-- A malicious MCP server author.
-- A compromised MCP server.
-- A dependency or configuration change that expands tool capability without review.
-- An accidental committer of credentials into local config or fixtures.
+- A malicious or compromised MCP server.
+- A dependency update that changes advertised capabilities after review.
+- A configuration author who accidentally embeds credentials.
+- A hostile endpoint attempting redirects, oversized responses, pagination loops, or unexpected MCP methods during inspection.
 
-## MVP Threats
+## Covered Threats
 
-- Tool poisoning through hidden or coercive tool descriptions.
-- Secret exposure in config, headers, environment values, examples, tool metadata, or schemas.
-- Tools with shell execution, broad file access, network/browser automation, database writes, credential access, Docker, Kubernetes, or host control.
-- Sensitive paths such as `~/.ssh`, `/etc/shadow`, `.env`, `kubeconfig`, and cloud credential directories.
-- SQL metadata that suggests write-capable or shell-capable database operations.
-- Policy drift between approved tools/paths and actual metadata.
+- Hidden or coercive instructions in tools, prompts, annotations, schemas, and metadata.
+- Secret-like values in configs and metadata.
+- Shell, filesystem, network, browser, database, credential, container, cluster, cloud, package-manager, and host-control capabilities.
+- Sensitive host paths and risky resource URIs.
+- SQL write/admin capability signals.
+- Missing or ambiguous tool input schemas.
+- Contradictory tool annotations.
+- Added or changed MCP metadata after baseline review.
+- Policy drift across tools, prompts, paths, and resource URI namespaces.
 
-## Detector Heuristics
+## Inspection Controls
 
-The v0.2.5 detectors are transparent static checks:
+- Explicit opt-in only.
+- HTTPS only.
+- No redirects or automatic retries.
+- Same-origin transport enforcement.
+- Environment-backed authorization headers.
+- JSON-RPC method allow list limited to initialization and metadata listing.
+- No `tools/call`, `prompts/get`, `resources/read`, stdio startup, or command execution.
+- Query parameter values are removed from endpoint metadata before reports or baselines are built.
+- Bounded request/response size, pagination, time, and artifact count.
 
-- Tool poisoning: suspicious instruction phrases, hidden markdown/HTML comments, suspicious encoded payloads, and invisible metadata characters.
-- Secret exposure: bearer tokens, basic authorization values, URL userinfo credentials, key/value secret fields, secret-bearing CLI arguments, JWT-like strings, connection strings, private-key-shaped blocks, and common ecosystem token shapes.
-- Dangerous capability: shell execution, file read/write, network or browser automation, database writes, credential access, Docker, Kubernetes, cloud CLI, infrastructure-as-code, package manager, and host system operations.
-- Sensitive path: references to SSH keys, `/etc/passwd`, `/etc/shadow`, `.env`, `kubeconfig`, cloud credential paths, token files, and browser profiles.
-- SQL risk: static signals for SQL read access and write/schema/command-capable SQL operations.
+These controls reduce exposure but do not make an untrusted endpoint safe. Metadata can still be deceptive, and the endpoint still observes the connecting IP and authorized list requests.
 
-These checks are not proof of exploitability. They are risk signals for review and CI gating.
+## Baseline Assumptions
+
+Baselines help identify changed advertised contracts. They do not authenticate a server, verify source provenance, or prove runtime behavior. Updating a baseline is a security review action, not an automatic remediation.
 
 ## OWASP MCP Mapping
 
-- MCP01: Token Mismanagement & Secret Exposure.
-- MCP02: Privilege Escalation via Scope Creep.
-- MCP03: Tool Poisoning.
-- MCP05: Command Injection & Execution.
-- MCP08: Lack of Audit and Telemetry, planned for future runtime/audit work.
+Findings map where applicable to OWASP MCP categories including secret exposure, scope creep, tool poisoning, command execution, and prompt injection through contextual payloads.
 
-## Assumptions
+## Security Boundary
 
-- Static metadata can reveal useful risk signals but cannot prove runtime safety.
-- Tool annotations and descriptions are untrusted unless the server is trusted.
-- Local fixture scanning must remain offline.
-- Runtime enforcement requires a future proxy/gateway and is outside the MVP.
-
-## Security Boundaries
-
-ArgusGate is not a sandbox, firewall, identity provider, DLP system, or complete policy enforcement point in the MVP. It reports risk before use; it does not make unsafe tools safe.
+ArgusGate is not a sandbox, DLP system, identity provider, runtime firewall, or complete policy enforcement point. It provides static and metadata-level risk signals before use.

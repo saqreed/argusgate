@@ -162,6 +162,17 @@ func (d DangerousCapabilityDetector) ScanTool(tool mcp.ToolDefinition) []report.
 	return scanCapabilityBlobs(tool.ServerID, tool.Name, mcp.ToolTextBlobs(tool), tool)
 }
 
+func (d DangerousCapabilityDetector) ScanArtifact(artifact mcp.Artifact) []report.Finding {
+	if artifact.Kind != mcp.ArtifactTool || artifact.ToolDefinition == nil {
+		return nil
+	}
+	findings := d.ScanTool(*artifact.ToolDefinition)
+	for i := range findings {
+		findings[i] = withArtifactIdentity(findings[i], artifact)
+	}
+	return findings
+}
+
 func scanCapabilityBlobs(serverID, toolName string, blobs []mcp.TextBlob, tool mcp.ToolDefinition) []report.Finding {
 	var findings []report.Finding
 	seenRule := map[string]struct{}{}

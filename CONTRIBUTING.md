@@ -1,12 +1,12 @@
 # Contributing
 
-ArgusGate is an early open-source MCP security scanner. Contributions should keep the v0.2 scope small, testable, and honest.
+ArgusGate is an early open-source MCP security scanner. Contributions should keep the v0.3 scope focused, testable, and honest.
 
 ## Development Setup
 
 Requirements:
 
-- Go 1.24 or newer.
+- Go 1.25 or newer.
 
 Run:
 
@@ -20,7 +20,10 @@ go build -o ./bin/argusgate ./cmd/argusgate
 
 ## Contribution Guidelines
 
-- Keep scanner behavior offline unless live inspection is explicitly designed and reviewed.
+- Keep config and fixture scans offline.
+- Keep live inspection explicit, HTTPS-only, metadata-only, bounded, and covered by transport security tests.
+- Never add tool calls, prompt retrieval, resource reads, or MCP command execution to inspection paths.
+- Treat baseline updates as explicit review actions.
 - Add tests for detector, policy, parser, report, or CLI behavior changes.
 - Do not add real secrets to tests, examples, docs, screenshots, or reports.
 - Redact secret-like values before printing or writing reports.

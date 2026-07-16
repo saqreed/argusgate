@@ -1,55 +1,52 @@
 # Release Process
 
-ArgusGate publishes prerelease builds from version tags such as `v0.2.5`.
+ArgusGate publishes prerelease builds from version tags such as `v0.3.0`.
 
-## Release Assets
+## Assets
 
-The release workflow builds compressed archives for:
+The release workflow builds Linux, macOS, and Windows archives for `amd64` and `arm64`. Each archive contains the binary, README, license, changelog, and JSON schemas. `SHA256SUMS.txt` covers every archive.
 
-- `linux/amd64`
-- `linux/arm64`
-- `darwin/amd64`
-- `darwin/arm64`
-- `windows/amd64`
-- `windows/arm64`
+The root `action.yml` downloads these archives and refuses to run them unless the checksum matches.
 
-Each archive contains:
-
-- the `argusgate` binary, or `argusgate.exe` on Windows;
-- `README.md`;
-- `LICENSE`;
-- `CHANGELOG.md`.
-
-The workflow also publishes `SHA256SUMS.txt` for release asset verification.
-
-## Maintainer Flow
+## Maintainer Checklist
 
 1. Update `argusgate/scanner.Version`.
-2. Update `CHANGELOG.md`.
-3. Run:
+2. Add the matching `CHANGELOG.md` section.
+3. Confirm examples and documentation use the same release version.
+4. Run:
 
    ```bash
    go mod verify
-   go test ./...
-   go vet ./...
+   go test -mod=readonly -count=1 ./...
+   go vet -mod=readonly ./...
+   go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+   go run github.com/securego/gosec/v2/cmd/gosec@v2.28.0 -quiet ./...
+   go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -no-color
    mkdir -p bin
-   go build -o ./bin/argusgate ./cmd/argusgate
+   go build -mod=readonly -trimpath -o ./bin/argusgate ./cmd/argusgate
    ```
 
-4. Commit the release changes.
-5. Create and push an annotated tag:
+5. Verify:
 
    ```bash
-   git tag -a v0.2.5 -m "ArgusGate v0.2.5"
-   git push origin main
-   git push origin v0.2.5
+   ./bin/argusgate --version
+   ./bin/argusgate policy validate --policy examples/policies/v03-trust.yaml
+   ./bin/argusgate baseline create --fixtures examples/fixtures/safe-tools.yaml --output argusgate-baseline.json
+   ./bin/argusgate fixtures scan --path examples/fixtures/safe-tools.yaml --baseline argusgate-baseline.json
+   ./bin/argusgate fixtures scan --path examples/fixtures/v03-metadata.yaml --policy examples/policies/v03-trust.yaml --report v03-report.json --sarif v03.sarif
    ```
 
-Pushing the tag starts `.github/workflows/release.yml`. The workflow runs tests, verifies that the tag matches `argusgate/scanner.Version`, checks that `CHANGELOG.md` has a matching section, cross-compiles release archives, verifies the Linux `amd64` binary version, generates checksums, and creates or updates a GitHub prerelease.
+6. Commit, merge, and create an annotated tag:
 
-## User Verification
+   ```bash
+   git tag -a v0.3.0 -m "ArgusGate v0.3.0"
+   git push origin main
+   git push origin v0.3.0
+   ```
 
-After downloading an archive and `SHA256SUMS.txt`, verify the checksum before running the binary.
+The malicious v0.3 fixture command should exit `1`. Pushing the tag runs tests, checks version/changelog consistency, cross-compiles all archives, generates checksums, and publishes a GitHub prerelease.
+
+## User Checksum Verification
 
 Linux or macOS:
 
@@ -60,21 +57,5 @@ sha256sum -c SHA256SUMS.txt --ignore-missing
 Windows PowerShell:
 
 ```powershell
-Get-FileHash .\argusgate_v0.2.5_windows_amd64.zip -Algorithm SHA256
+Get-FileHash .\argusgate_v0.3.0_windows_amd64.zip -Algorithm SHA256
 ```
-
-Compare the PowerShell hash with the matching line in `SHA256SUMS.txt`.
-
-## v0.2.5 Smoke Test
-
-Before tagging v0.2.5, verify JSON and SARIF outputs:
-
-```bash
-./bin/argusgate fixtures scan \
-  --path examples/fixtures/malicious-tools.yaml \
-  --policy examples/policies/default.yaml \
-  --report malicious-report.json \
-  --sarif malicious.sarif
-```
-
-The command is expected to exit `1` because the malicious fixture contains unsuppressed high-severity findings. Both report files should be valid JSON.

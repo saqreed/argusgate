@@ -44,6 +44,23 @@ func TestWritePrivateFileReplacesRegularFile(t *testing.T) {
 	}
 }
 
+func TestWritePrivateFileExclusiveDoesNotReplaceExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "baseline.json")
+	if err := WritePrivateFileExclusive(path, []byte("first")); err != nil {
+		t.Fatal(err)
+	}
+	if err := WritePrivateFileExclusive(path, []byte("second")); err == nil {
+		t.Fatal("expected exclusive write to reject existing output")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "first" {
+		t.Fatalf("existing file was modified: %q", data)
+	}
+}
+
 func TestWritePrivateFileRejectsSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation may require elevated Windows privileges")

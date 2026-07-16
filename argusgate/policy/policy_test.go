@@ -204,6 +204,122 @@ rules:
 	}
 }
 
+func TestLoadFileParsesV03TrustRules(t *testing.T) {
+	path := writePolicy(t, `
+version: "0.3"
+defaults:
+  allow_unknown_prompts: false
+  allow_unknown_resources: false
+rules:
+  allow_prompts: [review]
+  deny_prompts: [unsafe]
+  resource_uris:
+    allow: ["file:///workspace"]
+    deny: ["file:///workspace/secrets"]
+servers:
+  local:
+    allow_prompts: [local_review]
+    resource_uris:
+      allow: ["file:///local"]
+`)
+
+	p, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile failed: %v", err)
+	}
+	if p.Version != "0.3" || p.Defaults.AllowUnknownPrompts || p.Defaults.AllowUnknownResources {
+		t.Fatalf("unexpected defaults: %#v", p.Defaults)
+	}
+	if len(p.Rules.AllowPrompts) != 1 || len(p.Rules.ResourceURIs.Deny) != 1 {
+		t.Fatalf("v0.3 rules were not parsed: %#v", p.Rules)
+	}
+	if len(p.Servers["local"].AllowPrompts) != 1 {
+		t.Fatalf("server prompt rules were not parsed: %#v", p.Servers)
+	}
+}
+
+func TestV01AndV02PoliciesDefaultNewTrustControlsToAdvisory(t *testing.T) {
+	for _, version := range []string{"0.1", "0.2"} {
+		p, err := LoadFile(writePolicy(t, "version: \""+version+"\"\n"))
+		if err != nil {
+			t.Fatalf("load v%s policy: %v", version, err)
+		}
+		if !p.Defaults.AllowUnknownPrompts || !p.Defaults.AllowUnknownResources {
+			t.Fatalf("v%s policy changed behavior: %#v", version, p.Defaults)
+		}
+	}
+}
+
+func TestOlderPolicyVersionsRejectV03TrustFields(t *testing.T) {
+	for _, content := range []string{
+		"version: \"0.2\"\ndefaults:\n  allow_unknown_prompts: false\n",
+		"version: \"0.2\"\nrules:\n  deny_prompts: [unsafe]\n",
+		"version: \"0.1\"\nservers:\n  local:\n    resource_uris:\n      deny: [file:///secrets]\n",
+	} {
+		if _, err := LoadFile(writePolicy(t, content)); err == nil || !strings.Contains(err.Error(), "version \"0.3\"") {
+			t.Fatalf("expected v0.3 requirement for:\n%s\ngot %v", content, err)
+		}
+	}
+}
+
+func TestPromptAndResourcePolicyPrecedence(t *testing.T) {
+	p := Default()
+	p.Version = "0.3"
+	p.Defaults.AllowUnknownPrompts = false
+	p.Defaults.AllowUnknownResources = false
+	p.Rules.AllowPrompts = []string{"global"}
+	p.Rules.DenyPrompts = []string{"denied"}
+	p.Rules.ResourceURIs.Allow = []string{"https://trusted.example/api"}
+	p.Rules.ResourceURIs.Deny = []string{"https://trusted.example/api/private"}
+	p.Servers = map[string]ServerRule{
+		"s1": {
+			AllowPrompts: []string{"server"},
+			ResourceURIs: PathRules{Allow: []string{"file:///workspace"}},
+		},
+	}
+	artifacts := []mcp.Artifact{
+		mcp.ArtifactFromPrompt(mcp.PromptDefinition{ServerID: "s1", Name: "global"}),
+		mcp.ArtifactFromPrompt(mcp.PromptDefinition{ServerID: "s1", Name: "server"}),
+		mcp.ArtifactFromPrompt(mcp.PromptDefinition{ServerID: "s1", Name: "denied"}),
+		mcp.ArtifactFromResource(mcp.ResourceDefinition{ServerID: "s1", Name: "safe", URI: "file:///workspace/docs"}),
+		mcp.ArtifactFromResource(mcp.ResourceDefinition{ServerID: "s1", Name: "private", URI: "https://trusted.example/api/private/item"}),
+	}
+	findings := EvaluateArtifacts(p, artifacts)
+	if !hasFinding(findings, "AG-POL007") || !hasFinding(findings, "AG-POL008") || !hasFinding(findings, "AG-POL009") {
+		t.Fatalf("expected deny/unknown findings, got %#v", findings)
+	}
+}
+
+func TestResourceURIPrefixUsesAuthorityAndPathBoundaries(t *testing.T) {
+	p := Default()
+	p.Version = "0.3"
+	p.Defaults.AllowUnknownResources = false
+	p.Rules.ResourceURIs.Allow = []string{"https://trusted.example/api", "file:///workspace"}
+
+	allowed := []mcp.Artifact{
+		mcp.ArtifactFromResource(mcp.ResourceDefinition{ServerID: "s1", Name: "api", URI: "https://trusted.example/api/items"}),
+		mcp.ArtifactFromResource(mcp.ResourceDefinition{ServerID: "s1", Name: "file", URI: "file:///workspace/docs"}),
+	}
+	if findings := EvaluateArtifacts(p, allowed); hasFinding(findings, "AG-POL010") {
+		t.Fatalf("approved URI namespaces were rejected: %#v", findings)
+	}
+
+	blocked := []mcp.Artifact{
+		mcp.ArtifactFromResource(mcp.ResourceDefinition{ServerID: "s1", Name: "host-confusion", URI: "https://trusted.example.evil/api"}),
+		mcp.ArtifactFromResource(mcp.ResourceDefinition{ServerID: "s1", Name: "path-confusion", URI: "file:///workspace-secrets"}),
+	}
+	findings := EvaluateArtifacts(p, blocked)
+	count := 0
+	for _, finding := range findings {
+		if finding.ID == "AG-POL010" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Fatalf("expected two URI boundary findings, got %#v", findings)
+	}
+}
+
 func TestLoadFileRejectsInvalidSuppressions(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -364,6 +480,14 @@ func TestLoadFileRejectsOversizedPolicy(t *testing.T) {
 	}
 	if _, err := LoadFile(path); err == nil || !strings.Contains(err.Error(), "maximum") {
 		t.Fatalf("expected size limit error, got %v", err)
+	}
+}
+
+func TestLoadFileRejectsExcessiveNesting(t *testing.T) {
+	nested := strings.Repeat(`{"x":`, mcp.MaxNestingDepth+2) + `"value"` + strings.Repeat("}", mcp.MaxNestingDepth+2)
+	path := writePolicy(t, `{"version":"0.3","unknown":`+nested+`}`)
+	if _, err := LoadFile(path); err == nil || !strings.Contains(err.Error(), "nesting exceeds maximum depth") {
+		t.Fatalf("expected nesting limit error, got %v", err)
 	}
 }
 

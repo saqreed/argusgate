@@ -1,8 +1,10 @@
 package fileio
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -86,9 +88,47 @@ func WritePrivateFile(path string, data []byte) error {
 	if err := temp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tempPath, path); err != nil {
+	if err := replaceFile(tempPath, path); err != nil {
 		return err
 	}
 	keepTemp = false
+	return nil
+}
+
+func WritePrivateFileExclusive(path string, data []byte) error {
+	if path == "" {
+		return errors.New("output path is required")
+	}
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	temp, err := os.CreateTemp(dir, "."+base+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	cleanup := func() {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+	}
+	defer cleanup()
+
+	if err := temp.Chmod(0o600); err != nil {
+		return err
+	}
+	if _, err := temp.Write(data); err != nil {
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	if err := os.Link(tempPath, path); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return fmt.Errorf("output already exists: %s", path)
+		}
+		return err
+	}
 	return nil
 }

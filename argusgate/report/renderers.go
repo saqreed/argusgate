@@ -18,6 +18,9 @@ func WriteTerminalSummary(w io.Writer, r Report) {
 	fmt.Fprintf(w, "Source: %s (%s)\n", redact.Terminal(r.SourcePath), redact.Terminal(r.SourceType))
 	fmt.Fprintf(w, "Servers: %d\n", len(r.Servers))
 	fmt.Fprintf(w, "Tools: %d\n", len(r.Tools))
+	fmt.Fprintf(w, "Prompts: %d\n", len(r.Prompts))
+	fmt.Fprintf(w, "Resources: %d\n", len(r.Resources))
+	fmt.Fprintf(w, "Resource templates: %d\n", len(r.ResourceTemplates))
 	fmt.Fprintf(w, "Findings: %d\n", countUnsuppressed(r.Findings))
 	if suppressed := countSuppressed(r.Findings); suppressed > 0 {
 		fmt.Fprintf(w, "Suppressed: %d\n", suppressed)
@@ -52,6 +55,11 @@ func WriteTerminalSummary(w io.Writer, r Report) {
 		}
 		if finding.ToolName != "" {
 			fmt.Fprintf(w, " tool=%s", redact.Terminal(finding.ToolName))
+		} else if finding.SubjectType != "" || finding.SubjectName != "" {
+			fmt.Fprintf(w, " subject=%s:%s", redact.Terminal(finding.SubjectType), redact.Terminal(finding.SubjectName))
+		}
+		if finding.ChangeType != "" {
+			fmt.Fprintf(w, " change=%s", redact.Terminal(finding.ChangeType))
 		}
 		fmt.Fprintln(w, ")")
 		shown++

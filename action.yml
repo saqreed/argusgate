@@ -1,0 +1,105 @@
+name: ArgusGate Scan
+description: Run checksum-verified ArgusGate MCP metadata scanning in GitHub Actions.
+author: saqreed
+
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  source-type:
+    description: "Scan source type: config, fixtures, or url."
+    required: true
+  source:
+    description: Local file path or HTTPS MCP endpoint.
+    required: true
+  policy:
+    description: Optional ArgusGate policy path.
+    required: false
+    default: ""
+  baseline:
+    description: Optional reviewed ArgusGate baseline path.
+    required: false
+    default: ""
+  fail-on:
+    description: "Optional fail threshold: low, medium, high, or critical."
+    required: false
+    default: ""
+  report:
+    description: JSON report output path.
+    required: false
+    default: argusgate-report.json
+  sarif:
+    description: SARIF output path.
+    required: false
+    default: argusgate.sarif
+  server-id:
+    description: Optional stable server identifier for URL inspection.
+    required: false
+    default: ""
+  timeout:
+    description: URL inspection timeout.
+    required: false
+    default: 15s
+  token-env:
+    description: Optional environment variable name containing an HTTPS bearer token.
+    required: false
+    default: ""
+  version:
+    description: Release tag to download. Defaults to the action tag when invoked with a v* tag.
+    required: false
+    default: ""
+
+outputs:
+  report:
+    description: JSON report path.
+    value: ${{ steps.scan.outputs.report }}
+  sarif:
+    description: SARIF report path.
+    value: ${{ steps.scan.outputs.sarif }}
+  exit-code:
+    description: ArgusGate exit code.
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install checksum-verified ArgusGate
+      id: install
+      shell: pwsh
+      env:
+        ARGUSGATE_VERSION: ${{ inputs.version }}
+        ARGUSGATE_ACTION_REF: ${{ github.action_ref }}
+      run: >-
+        & "$env:GITHUB_ACTION_PATH/scripts/install-release.ps1"
+
+    - name: Run ArgusGate
+      id: scan
+      shell: pwsh
+      env:
+        ARGUSGATE_BINARY: ${{ steps.install.outputs.binary }}
+        ARGUSGATE_SOURCE_TYPE: ${{ inputs.source-type }}
+        ARGUSGATE_SOURCE: ${{ inputs.source }}
+        ARGUSGATE_POLICY: ${{ inputs.policy }}
+        ARGUSGATE_BASELINE: ${{ inputs.baseline }}
+        ARGUSGATE_FAIL_ON: ${{ inputs.fail-on }}
+        ARGUSGATE_REPORT: ${{ inputs.report }}
+        ARGUSGATE_SARIF: ${{ inputs.sarif }}
+        ARGUSGATE_SERVER_ID: ${{ inputs.server-id }}
+        ARGUSGATE_TIMEOUT: ${{ inputs.timeout }}
+        ARGUSGATE_TOKEN_ENV: ${{ inputs.token-env }}
+      run: >-
+        & "$env:GITHUB_ACTION_PATH/scripts/run-action.ps1"
+
+    - name: Enforce ArgusGate decision
+      if: always()
+      shell: pwsh
+      env:
+        ARGUSGATE_EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
+      run: |
+        $code = 2
+        if ([int]::TryParse($env:ARGUSGATE_EXIT_CODE, [ref]$code)) {
+          exit $code
+        }
+        Write-Error "ArgusGate did not produce a valid exit code."
+        exit 2

@@ -2,6 +2,7 @@ package policy
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -15,9 +16,17 @@ import (
 var policyPathCandidate = regexp.MustCompile(`(?i)(~[/\\][^\s"'<>),;]+|[A-Za-z]:[/\\][^\s"'<>),;]+|(?:/[A-Za-z0-9._-]+){1,}|(?:\./[A-Za-z0-9._/-]+)|[A-Za-z0-9._-]*(?:id_rsa|id_ed25519|kubeconfig|credentials|tokens|\.env)[A-Za-z0-9._/-]*)`)
 
 func EvaluateTools(p Policy, tools []mcp.ToolDefinition) []report.Finding {
-	var findings []report.Finding
+	artifacts := make([]mcp.Artifact, 0, len(tools))
 	for _, tool := range tools {
-		findings = append(findings, evaluateTool(p, tool)...)
+		artifacts = append(artifacts, mcp.ArtifactFromTool(tool))
+	}
+	return EvaluateArtifacts(p, artifacts)
+}
+
+func EvaluateArtifacts(p Policy, artifacts []mcp.Artifact) []report.Finding {
+	var findings []report.Finding
+	for _, artifact := range artifacts {
+		findings = append(findings, evaluateArtifact(p, artifact)...)
 	}
 	return findings
 }
@@ -184,6 +193,119 @@ func evaluateTool(p Policy, tool mcp.ToolDefinition) []report.Finding {
 	return findings
 }
 
+func evaluateArtifact(p Policy, artifact mcp.Artifact) []report.Finding {
+	var findings []report.Finding
+	switch artifact.Kind {
+	case mcp.ArtifactTool:
+		if artifact.ToolDefinition != nil {
+			findings = append(findings, evaluateTool(p, *artifact.ToolDefinition)...)
+		}
+	case mcp.ArtifactPrompt:
+		findings = append(findings, evaluatePrompt(p, artifact)...)
+	case mcp.ArtifactResource, mcp.ArtifactResourceTemplate:
+		findings = append(findings, evaluateResourceURI(p, artifact)...)
+	}
+	if artifact.Kind != mcp.ArtifactTool {
+		for _, blob := range mcp.ArtifactTextBlobs(artifact) {
+			found := evaluateKeywords(p, artifact.ServerID, "", blob.Location, blob.Text)
+			found = append(found, evaluatePathRules(p, artifact.ServerID, "", blob.Location, blob.Text)...)
+			for i := range found {
+				found[i] = withPolicyArtifactIdentity(found[i], artifact)
+			}
+			findings = append(findings, found...)
+		}
+	}
+	for i := range findings {
+		if findings[i].SubjectType == "" {
+			findings[i] = withPolicyArtifactIdentity(findings[i], artifact)
+		}
+	}
+	return findings
+}
+
+func evaluatePrompt(p Policy, artifact mcp.Artifact) []report.Finding {
+	serverRules := p.Servers[artifact.ServerID]
+	denied := containsFold(p.Rules.DenyPrompts, artifact.Name) || containsFold(serverRules.DenyPrompts, artifact.Name)
+	if denied {
+		return []report.Finding{withPolicyArtifactIdentity(report.Finding{
+			ID:              "AG-POL007",
+			Title:           "Prompt denied by policy",
+			Severity:        severity.High,
+			Category:        "policy-violation",
+			OWASPMCPMapping: "MCP06 Prompt Injection via Contextual Payloads",
+			Location:        "policy.rules.deny_prompts",
+			Evidence:        redact.Snippet(artifact.Name, 120),
+			Explanation:     "The prompt name matches a configured deny list.",
+			Recommendation:  "Remove the prompt or update the policy only after reviewing its metadata and arguments.",
+			Confidence:      "high",
+		}, artifact)}
+	}
+	if p.Defaults.AllowUnknownPrompts || isAllowedPrompt(p, serverRules, artifact.Name) {
+		return nil
+	}
+	return []report.Finding{withPolicyArtifactIdentity(report.Finding{
+		ID:              "AG-POL008",
+		Title:           "Prompt is not explicitly allowed by policy",
+		Severity:        severity.Medium,
+		Category:        "policy-violation",
+		OWASPMCPMapping: "MCP06 Prompt Injection via Contextual Payloads",
+		Location:        "policy.rules.allow_prompts",
+		Evidence:        redact.Snippet(artifact.Name, 120),
+		Explanation:     "The policy rejects unknown prompts, and this prompt is not in an allow list.",
+		Recommendation:  "Add the prompt after review or enable allow_unknown_prompts for advisory-only scans.",
+		Confidence:      "high",
+	}, artifact)}
+}
+
+func evaluateResourceURI(p Policy, artifact mcp.Artifact) []report.Finding {
+	uri := artifact.URI
+	if artifact.Kind == mcp.ArtifactResourceTemplate {
+		uri = artifact.URITemplate
+	}
+	serverRules := p.Servers[artifact.ServerID]
+	denied := matchesAnyURIPrefix(uri, p.Rules.ResourceURIs.Deny) ||
+		matchesAnyURIPrefix(uri, serverRules.ResourceURIs.Deny)
+	if denied {
+		return []report.Finding{withPolicyArtifactIdentity(report.Finding{
+			ID:              "AG-POL009",
+			Title:           "Resource URI denied by policy",
+			Severity:        severity.High,
+			Category:        "policy-violation",
+			OWASPMCPMapping: "MCP02 Scope Creep / Excessive Permissions",
+			Location:        "policy.rules.resource_uris.deny",
+			Evidence:        redact.Snippet(uri, 180),
+			Explanation:     "The resource URI or URI template matches a denied prefix.",
+			Recommendation:  "Remove the resource or restrict it to an approved URI namespace.",
+			Confidence:      "high",
+		}, artifact)}
+	}
+	if p.Defaults.AllowUnknownResources || isAllowedResourceURI(p, serverRules, uri) {
+		return nil
+	}
+	return []report.Finding{withPolicyArtifactIdentity(report.Finding{
+		ID:              "AG-POL010",
+		Title:           "Resource URI is not explicitly allowed by policy",
+		Severity:        severity.Medium,
+		Category:        "policy-violation",
+		OWASPMCPMapping: "MCP02 Scope Creep / Excessive Permissions",
+		Location:        "policy.rules.resource_uris.allow",
+		Evidence:        redact.Snippet(uri, 180),
+		Explanation:     "The policy rejects unknown resources, and this URI is outside the configured allow prefixes.",
+		Recommendation:  "Add an explicit URI prefix after review or enable allow_unknown_resources for advisory-only scans.",
+		Confidence:      "high",
+	}, artifact)}
+}
+
+func withPolicyArtifactIdentity(finding report.Finding, artifact mcp.Artifact) report.Finding {
+	finding.ServerID = artifact.ServerID
+	finding.SubjectType = string(artifact.Kind)
+	finding.SubjectName = artifact.Name
+	if artifact.Kind == mcp.ArtifactTool {
+		finding.ToolName = artifact.Name
+	}
+	return finding
+}
+
 func evaluateKeywords(p Policy, serverID, toolName, location, text string) []report.Finding {
 	var findings []report.Finding
 	lower := strings.ToLower(text)
@@ -322,6 +444,65 @@ func isAllowedTool(p Policy, serverRules ServerRule, toolName string) bool {
 		return containsFold(serverRules.AllowTools, toolName)
 	}
 	return containsFold(p.Rules.AllowTools, toolName)
+}
+
+func isAllowedPrompt(p Policy, serverRules ServerRule, promptName string) bool {
+	if len(serverRules.AllowPrompts) > 0 {
+		return containsFold(serverRules.AllowPrompts, promptName)
+	}
+	return containsFold(p.Rules.AllowPrompts, promptName)
+}
+
+func isAllowedResourceURI(p Policy, serverRules ServerRule, uri string) bool {
+	if len(serverRules.ResourceURIs.Allow) > 0 {
+		return matchesAnyURIPrefix(uri, serverRules.ResourceURIs.Allow)
+	}
+	return matchesAnyURIPrefix(uri, p.Rules.ResourceURIs.Allow)
+}
+
+func matchesAnyURIPrefix(candidate string, prefixes []string) bool {
+	candidate = strings.TrimSpace(candidate)
+	for _, prefix := range prefixes {
+		prefix = strings.TrimSpace(prefix)
+		if prefix != "" && uriHasPrefix(candidate, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func uriHasPrefix(candidate, prefix string) bool {
+	candidateURL, candidateErr := url.Parse(candidate)
+	prefixURL, prefixErr := url.Parse(prefix)
+	if candidateErr == nil && prefixErr == nil && prefixURL.Scheme != "" {
+		if !strings.EqualFold(candidateURL.Scheme, prefixURL.Scheme) {
+			return false
+		}
+		if !strings.EqualFold(candidateURL.Host, prefixURL.Host) {
+			return false
+		}
+		if prefixURL.RawQuery != "" && candidateURL.RawQuery != prefixURL.RawQuery {
+			return false
+		}
+		if prefixURL.Opaque != "" || candidateURL.Opaque != "" {
+			return hasURINamespacePrefix(strings.ToLower(candidateURL.Opaque), strings.ToLower(prefixURL.Opaque))
+		}
+		return hasURINamespacePrefix(candidateURL.EscapedPath(), prefixURL.EscapedPath())
+	}
+	return hasURINamespacePrefix(strings.ToLower(candidate), strings.ToLower(prefix))
+}
+
+func hasURINamespacePrefix(candidate, prefix string) bool {
+	if prefix == "" || prefix == "/" {
+		return true
+	}
+	if candidate == prefix {
+		return true
+	}
+	if strings.HasSuffix(prefix, "/") {
+		return strings.HasPrefix(candidate, prefix)
+	}
+	return strings.HasPrefix(candidate, prefix+"/")
 }
 
 func containsFold(values []string, needle string) bool {

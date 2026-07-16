@@ -24,7 +24,7 @@ func TestRunHelpAndVersion(t *testing.T) {
 	if code := Run([]string{"--version"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("version exit code = %d, stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "argusgate version 0.2.5") {
+	if !strings.Contains(stdout.String(), "argusgate version 0.3.0") {
 		t.Fatalf("unexpected version output: %s", stdout.String())
 	}
 }
@@ -150,11 +150,132 @@ func TestPolicyValidate(t *testing.T) {
 }
 
 func TestSubcommandHelpExitsZero(t *testing.T) {
-	for _, args := range [][]string{{"scan", "--help"}, {"policy", "--help"}, {"fixtures", "--help"}} {
+	for _, args := range [][]string{
+		{"scan", "--help"},
+		{"policy", "--help"},
+		{"fixtures", "--help"},
+		{"inspect", "--help"},
+		{"baseline", "--help"},
+		{"rules", "--help"},
+	} {
 		var stdout, stderr bytes.Buffer
 		if code := Run(args, &stdout, &stderr); code != 0 {
 			t.Fatalf("%v exit code = %d, stderr=%s", args, code, stderr.String())
 		}
+	}
+}
+
+func TestBaselineCreateScanDriftAndUpdate(t *testing.T) {
+	fixturePath := filepath.Join(t.TempDir(), "fixture.yaml")
+	source, err := os.ReadFile(repoPath(t, "examples", "fixtures", "safe-tools.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fixturePath, source, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baselinePath := filepath.Join(t.TempDir(), "baseline.json")
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{
+		"baseline", "create", "--fixtures", fixturePath, "--output", baselinePath,
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("baseline create exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(baselinePath); err != nil {
+		t.Fatalf("baseline was not created: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{
+		"fixtures", "scan", "--path", fixturePath, "--baseline", baselinePath,
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("unchanged baseline scan exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	changed := strings.Replace(string(source), "Read a file under ./examples", "Read and export a file under ./examples", 1)
+	if err := os.WriteFile(fixturePath, []byte(changed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{
+		"fixtures", "scan", "--path", fixturePath, "--baseline", baselinePath,
+	}, &stdout, &stderr); code != 1 {
+		t.Fatalf("drift scan exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "AG-BASE002") {
+		t.Fatalf("drift finding not shown: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{
+		"baseline", "update", "--fixtures", fixturePath, "--baseline", baselinePath,
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("baseline update exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{
+		"fixtures", "scan", "--path", fixturePath, "--baseline", baselinePath,
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("updated baseline scan exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestBaselineCreateRefusesExistingOutput(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "baseline.json")
+	if err := os.WriteFile(output, []byte("do not replace"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"baseline", "create",
+		"--fixtures", repoPath(t, "examples", "fixtures", "safe-tools.yaml"),
+		"--output", output,
+	}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "already exists") {
+		t.Fatalf("exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "do not replace" {
+		t.Fatalf("existing baseline was modified: %q", data)
+	}
+}
+
+func TestRulesListAndShow(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"rules", "list", "--format", "json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("rules list exit=%d stderr=%s", code, stderr.String())
+	}
+	var entries []map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &entries); err != nil {
+		t.Fatalf("rules list is not JSON: %v\n%s", err, stdout.String())
+	}
+	if len(entries) == 0 {
+		t.Fatal("rules list is empty")
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"rules", "show", "AG-MCP001"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("rules show exit=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Invalid or missing tool input schema") {
+		t.Fatalf("unexpected rules show output: %s", stdout.String())
+	}
+}
+
+func TestInspectRejectsNonHTTPSBeforeNetwork(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"inspect", "--url", "http://127.0.0.1:65535/mcp"}, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "requires an https:// endpoint") {
+		t.Fatalf("exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }
 
