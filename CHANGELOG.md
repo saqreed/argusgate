@@ -31,6 +31,8 @@ All notable changes to ArgusGate will be documented in this file.
 - Baselines omit environment/header values and redact secret-like metadata before hashing.
 - Resource URI policy matching now compares URI authorities and path boundaries instead of unsafe string prefixes.
 - Windows output replacement uses atomic replace semantics rather than delete-and-rename behavior.
+- Raised the minimum Go toolchain to 1.25.12 after CI identified reachable standard-library TLS vulnerabilities in Go 1.25.0.
+- Updated pinned official GitHub Actions to Node.js 24 releases.
 
 ## 0.2.5 - 2026-07-13
 

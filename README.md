@@ -38,7 +38,7 @@ cd .\argusgate_v0.3.0_windows_amd64\argusgate_v0.3.0_windows_amd64
 .\argusgate.exe --version
 ```
 
-Build from source with Go 1.25 or newer:
+Build from source with Go 1.25.12 or newer:
 
 ```bash
 mkdir -p bin
@@ -202,7 +202,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Scan MCP metadata
         id: argusgate
