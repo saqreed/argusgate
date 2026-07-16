@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["version"],
   "properties": {
-    "version": { "type": "string", "enum": ["0.1", "0.2"] },
+    "version": { "type": "string", "enum": ["0.1", "0.2", "0.3"] },
     "project": {
       "type": "object",
       "properties": {
@@ -18,7 +18,9 @@
       "properties": {
         "fail_on": { "$ref": "#/$defs/failSeverity" },
         "allowed_severity": { "$ref": "#/$defs/severity" },
-        "allow_unknown_tools": { "type": "boolean" }
+        "allow_unknown_tools": { "type": "boolean" },
+        "allow_unknown_prompts": { "type": "boolean" },
+        "allow_unknown_resources": { "type": "boolean" }
       },
       "additionalProperties": false
     },
@@ -27,15 +29,11 @@
       "properties": {
         "allow_tools": { "$ref": "#/$defs/stringList" },
         "deny_tools": { "$ref": "#/$defs/stringList" },
+        "allow_prompts": { "$ref": "#/$defs/stringList" },
+        "deny_prompts": { "$ref": "#/$defs/stringList" },
         "deny_keywords": { "$ref": "#/$defs/stringList" },
-        "paths": {
-          "type": "object",
-          "properties": {
-            "deny": { "$ref": "#/$defs/stringList" },
-            "allow": { "$ref": "#/$defs/stringList" }
-          },
-          "additionalProperties": false
-        },
+        "paths": { "$ref": "#/$defs/pathRules" },
+        "resource_uris": { "$ref": "#/$defs/pathRules" },
         "suppressions": {
           "type": "array",
           "maxItems": 1024,
@@ -47,14 +45,7 @@
     },
     "servers": {
       "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "allow_tools": { "$ref": "#/$defs/stringList" },
-          "deny_tools": { "$ref": "#/$defs/stringList" }
-        },
-        "additionalProperties": false
-      }
+      "additionalProperties": { "$ref": "#/$defs/serverRule" }
     }
   },
   "$defs": {
@@ -70,6 +61,33 @@
       "type": "array",
       "maxItems": 1024,
       "items": { "type": "string", "minLength": 1 }
+    },
+    "pathRules": {
+      "type": "object",
+      "properties": {
+        "deny": { "$ref": "#/$defs/stringList" },
+        "allow": { "$ref": "#/$defs/stringList" }
+      },
+      "additionalProperties": false
+    },
+    "serverRule": {
+      "type": "object",
+      "properties": {
+        "allow_tools": { "$ref": "#/$defs/stringList" },
+        "deny_tools": { "$ref": "#/$defs/stringList" },
+        "allow_prompts": { "$ref": "#/$defs/stringList" },
+        "deny_prompts": { "$ref": "#/$defs/stringList" },
+        "resource_uris": { "$ref": "#/$defs/pathRules" }
+      },
+      "additionalProperties": false
+    },
+    "legacyServerRule": {
+      "type": "object",
+      "properties": {
+        "allow_tools": { "$ref": "#/$defs/stringList" },
+        "deny_tools": { "$ref": "#/$defs/stringList" }
+      },
+      "additionalProperties": false
     },
     "suppression": {
       "type": "object",
@@ -89,13 +107,41 @@
         "required": ["version"]
       },
       "then": {
-        "not": {
-          "properties": {
-            "rules": {
-              "required": ["suppressions"]
+        "properties": {
+          "rules": {
+            "not": { "required": ["suppressions"] }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "version": { "enum": ["0.1", "0.2"] } },
+        "required": ["version"]
+      },
+      "then": {
+        "properties": {
+          "defaults": {
+            "not": {
+              "anyOf": [
+                { "required": ["allow_unknown_prompts"] },
+                { "required": ["allow_unknown_resources"] }
+              ]
             }
           },
-          "required": ["rules"]
+          "rules": {
+            "not": {
+              "anyOf": [
+                { "required": ["allow_prompts"] },
+                { "required": ["deny_prompts"] },
+                { "required": ["resource_uris"] }
+              ]
+            }
+          },
+          "servers": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/legacyServerRule" }
+          }
         }
       }
     }

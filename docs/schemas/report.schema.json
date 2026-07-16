@@ -10,6 +10,9 @@
     "source_path",
     "servers",
     "tools",
+    "prompts",
+    "resources",
+    "resource_templates",
     "findings",
     "severity_summary",
     "policy_summary",
@@ -18,8 +21,9 @@
   "properties": {
     "scanned_at": { "type": "string", "format": "date-time" },
     "argusgate_version": { "type": "string" },
-    "source_type": { "type": "string", "enum": ["config", "fixtures"] },
+    "source_type": { "type": "string", "enum": ["config", "fixtures", "live"] },
     "source_path": { "type": "string" },
+    "protocol_version": { "type": "string" },
     "servers": {
       "type": "array",
       "items": { "$ref": "#/$defs/server" }
@@ -28,40 +32,57 @@
       "type": "array",
       "items": { "$ref": "#/$defs/tool" }
     },
+    "prompts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/prompt" }
+    },
+    "resources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/resource" }
+    },
+    "resource_templates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/resourceTemplate" }
+    },
     "findings": {
       "type": "array",
       "items": { "$ref": "#/$defs/finding" }
     },
-    "severity_summary": {
-      "type": "object",
-      "required": ["critical", "high", "medium", "low", "info"],
-      "properties": {
-        "critical": { "type": "integer", "minimum": 0 },
-        "high": { "type": "integer", "minimum": 0 },
-        "medium": { "type": "integer", "minimum": 0 },
-        "low": { "type": "integer", "minimum": 0 },
-        "info": { "type": "integer", "minimum": 0 }
-      },
-      "additionalProperties": false
-    },
-    "policy_summary": { "type": "object" },
-    "exit_decision": { "type": "object" }
+    "severity_summary": { "$ref": "#/$defs/severitySummary" },
+    "policy_summary": { "$ref": "#/$defs/policySummary" },
+    "baseline_summary": { "$ref": "#/$defs/baselineSummary" },
+    "exit_decision": { "$ref": "#/$defs/exitDecision" }
   },
   "$defs": {
     "severity": {
       "type": "string",
       "enum": ["info", "low", "medium", "high", "critical"]
     },
+    "failSeverity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
     "server": {
       "type": "object",
-      "required": ["id", "tool_count"],
+      "required": [
+        "id",
+        "tool_count",
+        "prompt_count",
+        "resource_count",
+        "resource_template_count"
+      ],
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
+        "version": { "type": "string" },
         "transport": { "type": "string" },
+        "protocol_version": { "type": "string" },
         "command": { "type": "string" },
         "url": { "type": "string" },
-        "tool_count": { "type": "integer", "minimum": 0 }
+        "tool_count": { "type": "integer", "minimum": 0 },
+        "prompt_count": { "type": "integer", "minimum": 0 },
+        "resource_count": { "type": "integer", "minimum": 0 },
+        "resource_template_count": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
     },
@@ -76,6 +97,44 @@
       },
       "additionalProperties": false
     },
+    "prompt": {
+      "type": "object",
+      "required": ["server_id", "name", "argument_count"],
+      "properties": {
+        "server_id": { "type": "string" },
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "description_excerpt": { "type": "string" },
+        "argument_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "resource": {
+      "type": "object",
+      "required": ["server_id", "name", "uri"],
+      "properties": {
+        "server_id": { "type": "string" },
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "uri": { "type": "string" },
+        "description_excerpt": { "type": "string" },
+        "mime_type": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "resourceTemplate": {
+      "type": "object",
+      "required": ["server_id", "name", "uri_template"],
+      "properties": {
+        "server_id": { "type": "string" },
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "uri_template": { "type": "string" },
+        "description_excerpt": { "type": "string" },
+        "mime_type": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "finding": {
       "type": "object",
       "required": [
@@ -84,7 +143,8 @@
         "severity",
         "category",
         "explanation",
-        "confidence"
+        "confidence",
+        "fingerprint"
       ],
       "properties": {
         "id": { "type": "string" },
@@ -94,6 +154,12 @@
         "owasp_mcp_mapping": { "type": "string" },
         "server_id": { "type": "string" },
         "tool_name": { "type": "string" },
+        "subject_type": {
+          "type": "string",
+          "enum": ["server", "tool", "prompt", "resource", "resource_template"]
+        },
+        "subject_name": { "type": "string" },
+        "change_type": { "type": "string", "enum": ["added", "changed", "removed"] },
         "location": { "type": "string" },
         "evidence": { "type": "string" },
         "explanation": { "type": "string" },
@@ -102,6 +168,80 @@
         "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "suppressed": { "type": "boolean" },
         "suppression_reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "severitySummary": {
+      "type": "object",
+      "required": ["critical", "high", "medium", "low", "info"],
+      "properties": {
+        "critical": { "type": "integer", "minimum": 0 },
+        "high": { "type": "integer", "minimum": 0 },
+        "medium": { "type": "integer", "minimum": 0 },
+        "low": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "policySummary": {
+      "type": "object",
+      "required": [
+        "version",
+        "fail_on",
+        "allow_unknown_tools",
+        "allow_unknown_prompts",
+        "allow_unknown_resources",
+        "denied_tools",
+        "denied_prompts",
+        "denied_keywords",
+        "denied_paths",
+        "allowed_paths",
+        "denied_resource_uris",
+        "allowed_resource_uris",
+        "suppressions",
+        "server_rules"
+      ],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string", "enum": ["0.1", "0.2", "0.3"] },
+        "fail_on": { "$ref": "#/$defs/failSeverity" },
+        "allow_unknown_tools": { "type": "boolean" },
+        "allow_unknown_prompts": { "type": "boolean" },
+        "allow_unknown_resources": { "type": "boolean" },
+        "denied_tools": { "type": "integer", "minimum": 0 },
+        "denied_prompts": { "type": "integer", "minimum": 0 },
+        "denied_keywords": { "type": "integer", "minimum": 0 },
+        "denied_paths": { "type": "integer", "minimum": 0 },
+        "allowed_paths": { "type": "integer", "minimum": 0 },
+        "denied_resource_uris": { "type": "integer", "minimum": 0 },
+        "allowed_resource_uris": { "type": "integer", "minimum": 0 },
+        "suppressions": { "type": "integer", "minimum": 0 },
+        "server_rules": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "baselineSummary": {
+      "type": "object",
+      "required": ["version", "added", "changed", "removed", "server_changed"],
+      "properties": {
+        "path": { "type": "string" },
+        "version": { "type": "string" },
+        "added": { "type": "integer", "minimum": 0 },
+        "changed": { "type": "integer", "minimum": 0 },
+        "removed": { "type": "integer", "minimum": 0 },
+        "server_changed": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "exitDecision": {
+      "type": "object",
+      "required": ["exit_code", "fail_on", "highest_severity", "findings_at_or_above", "reason"],
+      "properties": {
+        "exit_code": { "type": "integer", "enum": [0, 1] },
+        "fail_on": { "$ref": "#/$defs/failSeverity" },
+        "highest_severity": { "$ref": "#/$defs/severity" },
+        "findings_at_or_above": { "type": "integer", "minimum": 0 },
+        "reason": { "type": "string" }
       },
       "additionalProperties": false
     }

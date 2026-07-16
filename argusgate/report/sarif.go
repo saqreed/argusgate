@@ -152,6 +152,9 @@ func sarifResults(r Report) []sarifResult {
 				"owasp_mcp_mapping": finding.OWASPMCPMapping,
 				"server_id":         finding.ServerID,
 				"tool_name":         finding.ToolName,
+				"subject_type":      finding.SubjectType,
+				"subject_name":      finding.SubjectName,
+				"change_type":       finding.ChangeType,
 				"location":          finding.Location,
 				"confidence":        finding.Confidence,
 			},
@@ -162,9 +165,9 @@ func sarifResults(r Report) []sarifResult {
 					ArtifactLocation: sarifArtifactLocation{URI: strings.ReplaceAll(r.SourcePath, "\\", "/")},
 				},
 				LogicalLocations: []sarifLogicalLocation{{
-					Name:               finding.ToolName,
+					Name:               findingSubjectName(finding),
 					FullyQualifiedName: finding.Location,
-					Kind:               "function",
+					Kind:               sarifLogicalKind(finding),
 				}},
 			}}
 		}
@@ -177,6 +180,24 @@ func sarifResults(r Report) []sarifResult {
 		return results[i].RuleID < results[j].RuleID
 	})
 	return results
+}
+
+func findingSubjectName(finding Finding) string {
+	if finding.SubjectName != "" {
+		return finding.SubjectName
+	}
+	return finding.ToolName
+}
+
+func sarifLogicalKind(finding Finding) string {
+	switch finding.SubjectType {
+	case "prompt":
+		return "resource"
+	case "resource", "resource_template":
+		return "resource"
+	default:
+		return "function"
+	}
 }
 
 func sarifLevel(level severity.Level) string {

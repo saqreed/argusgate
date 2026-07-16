@@ -1,116 +1,86 @@
 # Policy Format
 
-ArgusGate policies are YAML files.
+ArgusGate policies are strict YAML documents. Unknown fields, ambiguous hyphen/underscore aliases, duplicate suppression fingerprints, empty rules, multiple YAML documents, and oversized files are rejected.
 
-## Top-Level Fields
+## Versions
 
-- `version`: policy format version. Use `"0.1"` for v0.1-compatible policies or `"0.2"` for suppressions.
-- `project.name`: optional project label for reports.
-- `defaults.fail_on`: severity threshold that produces exit code `1`.
-- `defaults.allowed_severity`: optional highest allowed severity. If `fail_on` is omitted, ArgusGate fails on the next severity above this value.
-- `defaults.allow_unknown_tools`: whether tools outside allow lists are advisory or policy violations.
-- `rules.allow_tools`: global tool allow list.
-- `rules.deny_tools`: global tool deny list.
-- `rules.deny_keywords`: metadata keywords that produce policy findings.
-- `rules.paths.deny`: denied path prefixes or sensitive path segments.
-- `rules.paths.allow`: allowed path prefixes.
-- `rules.suppressions`: v0.2 list of reviewed finding fingerprints that should not fail CI.
-- `servers.<server_id>.allow_tools`: server-specific allow list.
-- `servers.<server_id>.deny_tools`: server-specific deny list.
+- `0.1`: tool, keyword, and path rules.
+- `0.2`: adds finding suppressions.
+- `0.3`: adds prompt and resource URI trust rules.
 
-Hyphenated field names such as `deny-tools` are accepted as aliases for underscore names. Server IDs are preserved exactly.
+Older policy versions remain compatible. Prompt/resource fields require `version: "0.3"` so new semantics cannot be enabled accidentally in an older policy.
 
-Policy parsing is strict. Unknown fields, empty rule entries, multiple YAML documents, duplicate suppression fingerprints, and ambiguous aliases such as defining both `fail-on` and `fail_on` are rejected. Policy files are limited to 1 MiB and each rule list is limited to 1,024 entries.
+## Fields
 
-## Severities
+### Defaults
 
-Valid `defaults.fail_on` severities:
+- `fail_on`: `low`, `medium`, `high`, or `critical`.
+- `allowed_severity`: optional highest allowed severity; used only when `fail_on` is omitted.
+- `allow_unknown_tools`: report tools outside effective allow lists when false.
+- `allow_unknown_prompts`: v0.3 equivalent for prompts.
+- `allow_unknown_resources`: v0.3 equivalent for resources and resource templates.
 
-- `low`
-- `medium`
-- `high`
-- `critical`
+### Global Rules
 
-`defaults.fail_on` controls the process exit code only. It does not suppress findings. A scan still records all detector and policy findings.
+- `allow_tools`, `deny_tools`
+- `allow_prompts`, `deny_prompts`
+- `deny_keywords`
+- `paths.allow`, `paths.deny`
+- `resource_uris.allow`, `resource_uris.deny`
+- `suppressions`
 
-`info` remains a finding severity and is valid for `defaults.allowed_severity`, but it is not a valid `defaults.fail_on` threshold.
+### Server Rules
 
-Suppressed findings are still recorded in JSON reports with `suppressed: true`, but they are excluded from severity summaries, SARIF results, and exit-code decisions.
+- `servers.<id>.allow_tools`, `deny_tools`
+- `servers.<id>.allow_prompts`, `deny_prompts`
+- `servers.<id>.resource_uris.allow`, `resource_uris.deny`
+
+Server IDs are matched exactly. Hyphenated field aliases such as `deny-tools` are normalized, but defining both normalized forms is an error.
 
 ## Precedence
 
-ArgusGate applies policy rules in this order:
+1. Explicit deny beats allow.
+2. Global denies always remain active.
+3. Server-specific deny rules add restrictions for that server.
+4. A non-empty server-specific allow list replaces the corresponding global allow list for unknown-item checks on that server.
+5. Otherwise, the global allow list is used.
+6. Unknown tools, prompts, and resources follow their respective `allow_unknown_*` defaults.
+7. Path and resource URI deny rules beat allow rules.
+8. Suppressions apply after detector and policy findings are created and fingerprinted.
+9. Suppressed findings remain in JSON for auditability but do not affect severity summaries, SARIF, or exit decisions.
+10. `fail_on` controls only the exit decision; it never prevents findings from being recorded.
 
-1. Explicit deny beats allow. A tool in `deny_tools` is reported even if it also appears in an allow list.
-2. Server-specific tool rules apply only to that server ID.
-3. If `servers.<server_id>.allow_tools` is set, that server-specific allow list is used for unknown-tool checks on that server.
-4. If no server-specific allow list is set, `rules.allow_tools` is used for unknown-tool checks.
-5. If `defaults.allow_unknown_tools` is `true`, tools outside allow lists are not policy violations.
-6. If `defaults.allow_unknown_tools` is `false`, tools outside the effective allow list are reported as policy violations.
-7. Path deny rules beat path allow rules.
-8. Missing policy falls back to default MVP policy: `fail_on: high` and `allow_unknown_tools: true`.
-9. v0.2 suppressions are applied after detector and policy findings are created, but before the exit decision is calculated.
-10. `defaults.fail_on` controls exit code only. It never prevents findings from being recorded.
+Missing policy uses safe advisory defaults: `fail_on: high`, unknown tools/prompts/resources allowed, and no suppressions.
 
-Path rules are intentionally conservative. Values that look like paths, such as `/etc`, `./examples`, or `C:\Users\dev\.ssh`, are treated as path prefixes and must match the start of the candidate path on a path boundary. Plain values, such as `.env` or `kubeconfig`, match path segments. ArgusGate does not treat arbitrary substring matches as path policy violations.
+## Resource URI Matching
 
-## Example
+For absolute URIs, ArgusGate compares:
 
-```yaml
-version: "0.1"
-project:
-  name: "argusgate-example"
-defaults:
-  fail_on: "high"
-  allow_unknown_tools: true
-rules:
-  deny_tools:
-    - "shell_exec"
-    - "run_command"
-  deny_keywords:
-    - "ignore previous instructions"
-    - "private key"
-  paths:
-    deny:
-      - "~/.ssh"
-      - "/etc"
-    allow:
-      - "./examples"
-servers:
-  local-filesystem:
-    allow_tools:
-      - "read_file"
-    deny_tools:
-      - "write_file"
-```
+- scheme case-insensitively;
+- authority/host case-insensitively;
+- path on namespace boundaries.
+
+For example, `https://trusted.example/api` matches `https://trusted.example/api/items`, but does not match `https://trusted.example.evil/api` or `https://trusted.example/api-private`.
 
 ## Suppressions
 
-Suppressions are available in policy `version: "0.2"`. A suppression matches only a stable finding fingerprint from a previous ArgusGate JSON report.
-
-Policies using `version: "0.1"` must not define suppressions.
+Suppressions require policy `0.2` or newer:
 
 ```yaml
-version: "0.2"
+version: "0.3"
 rules:
   suppressions:
     - fingerprint: "0000000000000000000000000000000000000000000000000000000000000000"
-      reason: "accepted local fixture risk after review"
+      reason: "accepted after review"
       expires: "2099-12-31"
 ```
 
-Rules:
-
-- `fingerprint` must be a 64-character SHA-256 hex string.
+- `fingerprint` is a 64-character SHA-256 hex value from a report.
 - `reason` is required.
-- `expires` is optional and must use `YYYY-MM-DD`.
-- Expired suppressions are ignored and reported as medium policy finding `AG-POL006`.
-- Suppressed findings remain in JSON reports for auditability.
-- Suppressed findings do not affect exit code or SARIF output.
-- Scanner safety finding `AG-SCAN001` cannot be suppressed because it indicates incomplete analysis.
+- `expires` is optional and uses `YYYY-MM-DD`.
+- Expired suppressions produce medium `AG-POL006`.
+- Critical scanner-limit finding `AG-SCAN001` cannot be suppressed.
 
-See [schemas/policy.schema.json](schemas/policy.schema.json) for the machine-readable schema.
+## Example
 
-## Exit Decisions
-
-ArgusGate exits with `1` when at least one unsuppressed finding is at or above `defaults.fail_on`. Parser errors, invalid policies, and internal errors exit with `2`.
+See [examples/policies/v03-trust.yaml](../examples/policies/v03-trust.yaml) and the [policy JSON Schema](schemas/policy.schema.json).

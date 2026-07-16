@@ -79,6 +79,17 @@ func (d SQLRiskDetector) ScanTool(tool mcp.ToolDefinition) []report.Finding {
 	return findings
 }
 
+func (d SQLRiskDetector) ScanArtifact(artifact mcp.Artifact) []report.Finding {
+	if artifact.Kind != mcp.ArtifactTool || artifact.ToolDefinition == nil {
+		return nil
+	}
+	findings := d.ScanTool(*artifact.ToolDefinition)
+	for i := range findings {
+		findings[i] = withArtifactIdentity(findings[i], artifact)
+	}
+	return findings
+}
+
 func looksDatabaseRelated(tool mcp.ToolDefinition, text string) bool {
 	combined := strings.ToLower(tool.Name + " " + tool.Title + " " + tool.Description + " " + text)
 	return containsAny(combined, []string{"sql", "database", "db_", "query", "postgres", "mysql", "sqlite", "bigquery", "warehouse"})

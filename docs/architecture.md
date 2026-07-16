@@ -1,61 +1,69 @@
 # Architecture
 
-ArgusGate is currently a CLI-first Go project. The MVP is intentionally offline and file-based.
+ArgusGate v0.3.0 is a CLI-first Go application. Local scans are offline; network access exists only behind the explicit `inspect` command or `--url` baseline source.
 
-## Package Layout
+## Packages
 
-- `cmd/argusgate`: CLI entrypoint.
-- `argusgate/cli`: command parsing and exit-code handling.
-- `argusgate/mcp`: MCP-like config and fixture parsers plus tool/server models.
-- `argusgate/policy`: YAML policy parser, validator, policy findings, and exit decisions.
-- `argusgate/scanner`: scan orchestration.
-- `argusgate/scanner/detectors`: heuristic security detectors, split by detector family with stable rule metadata.
-- `argusgate/scanner/severity`: severity ordering and threshold logic.
-- `argusgate/report`: JSON report model, stable finding fingerprints, terminal summary renderer, and SARIF renderer.
-- `argusgate/internal/redact`: secret redaction helpers.
-- `argusgate/internal/fileio`: bounded regular-file reads and private atomic report writes.
+- `cmd/argusgate`: process entrypoint.
+- `argusgate/cli`: commands, flags, output paths, and exit codes.
+- `argusgate/mcp`: bounded config/fixture parsing and MCP metadata models.
+- `argusgate/inspection`: constrained HTTPS Streamable HTTP metadata client.
+- `argusgate/baseline`: normalized contract hashing and drift findings.
+- `argusgate/policy`: strict YAML parsing, precedence, suppressions, and exit decisions.
+- `argusgate/scanner`: orchestration and finding limits.
+- `argusgate/scanner/detectors`: focused heuristic detectors and rule metadata.
+- `argusgate/rules`: stable public rule catalog.
+- `argusgate/report`: JSON, terminal, fingerprints, and SARIF.
+- `argusgate/internal/redact`: secret and terminal-output redaction.
+- `argusgate/internal/fileio`: bounded reads and private atomic output writes.
 
 ## Data Flow
 
 ```mermaid
 flowchart LR
-    CLI[argusgate CLI] --> Parser[MCP config or fixture parser]
-    CLI --> Policy[Policy parser and validator]
-    Parser --> Scanner[Scanner orchestration]
-    Policy --> Scanner
-    Scanner --> Detectors[Security detectors]
-    Scanner --> Evaluator[Policy evaluator]
-    Detectors --> Report[Report builder]
-    Evaluator --> Report
-    Report --> Terminal[Terminal summary]
-    Report --> JSON[JSON report]
-    Report --> SARIF[SARIF report]
+    CLI["CLI"] --> Local["Config / fixture parser"]
+    CLI --> Live["Opt-in HTTPS inspector"]
+    Local --> Doc["MCP metadata document"]
+    Live --> Doc
+    Doc --> Base["Baseline comparator"]
+    Doc --> Scan["Detectors"]
+    Doc --> Policy["Policy evaluator"]
+    Base --> Findings["Findings"]
+    Scan --> Findings
+    Policy --> Findings
+    Findings --> Suppress["Fingerprint and suppressions"]
+    Suppress --> Report["Terminal / JSON / SARIF"]
 ```
 
-## MVP Runtime Behavior
+## Inspection Boundary
 
-The scanner reads size-bounded regular local files, validates server and tool shapes, applies detectors and policy rules, assigns stable finding fingerprints, applies policy suppressions, redacts secret-like evidence, atomically writes optional JSON and SARIF reports, and exits with a CI-friendly code.
+The inspector uses the official MCP Go SDK but wraps its HTTP transport with an allow list.
 
-It does not execute commands from MCP configs. It does not connect to external services. It does not call tools.
+Allowed JSON-RPC methods:
 
-CLI output can be a text summary, JSON, or SARIF on stdout. JSON reports are generated from the same report model used for file output, so CI consumers receive the same fields regardless of output mode. SARIF output omits suppressed findings so reviewed risks do not create code scanning alerts.
+- `initialize`
+- `notifications/initialized`
+- `tools/list`
+- `prompts/list`
+- `resources/list`
+- `resources/templates/list`
 
-## Detector Layout
+The transport blocks tool calls, prompt retrieval, resource reads, redirects, retries, standalone SSE, cross-origin requests, non-HTTPS endpoints, credentials in URLs, and unexpected HTTP methods. Requests and responses have hard size limits, list pagination is bounded, and credentials are read from environment variables only.
 
-Detectors are intentionally small and offline:
+## Baseline Model
 
-- tool poisoning: suspicious instructions, hidden markdown/HTML comments, encoded instructions, and invisible characters;
-- secret exposure: token-like values, private-key placeholders, connection strings, authorization headers, and URL credentials;
-- dangerous capability: shell, filesystem mutation, unrestricted file reads, network, browser automation, credentials, Docker/Kubernetes, cloud CLI, infrastructure-as-code, package manager, host administration, and database mutation capabilities;
-- sensitive paths: host credential paths and sensitive file path segments;
-- SQL risk: read-only and write/admin SQL signals.
+A baseline contains:
 
-The detector rule registry gives each rule a stable ID, severity, category, OWASP MCP mapping, and recommendation for reports and future integrations.
+- normalized server identity and contract hashes;
+- tool, prompt, resource, and resource-template identity/contract hashes;
+- protocol and ArgusGate format versions.
 
-## Release Pipeline
+Environment/header values are omitted; only key names affect server contracts. Secret-like values elsewhere are redacted before hashing. Added and changed contracts are high severity; removal is informational.
 
-The CI workflow verifies modules, runs race-enabled tests and vet, and builds the Linux CLI on pushes and pull requests. GitHub Actions are pinned to commit SHAs. The release workflow runs on version tags, repeats test and vet checks, cross-compiles static CLI binaries for Linux, macOS, and Windows, requires all six archives, generates `SHA256SUMS.txt`, and publishes a GitHub prerelease with the generated assets.
+## Determinism And Failure
 
-## Future Gateway Shape
+Map traversal, artifact ordering, finding ordering, fingerprints, rule listing, reports, and baseline entries are sorted deterministically. Inputs, policies, metadata nesting, HTTP messages, per-response bytes, session-response bytes, pages, artifacts, and findings are bounded. Incomplete analysis creates unsuppressible critical `AG-SCAN001`.
 
-The policy and report packages are kept separate so a future MCP proxy can reuse them. A runtime gateway would add transport support, invocation argument checks, audit logging, and enforcement decisions. That gateway is not implemented in the MVP.
+## Deferred Runtime Gateway
+
+The package boundaries allow future reuse by a runtime gateway, but v0.3.0 does not proxy MCP traffic or enforce tool invocations.

@@ -2,6 +2,36 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## 0.3.0 - 2026-07-16
+
+### Added
+
+- Added tools, prompts, resources, and resource-template models and scanning across local fixtures, configs, reports, and SARIF.
+- Added reviewed baseline creation, update, and scan comparison for server and metadata contract drift.
+- Added opt-in HTTPS Streamable HTTP metadata inspection using the official MCP Go SDK.
+- Added policy `version: "0.3"` with prompt allow/deny rules, resource URI namespaces, and server-specific overrides.
+- Added MCP contract findings for missing object-root tool schemas, contradictory annotations, and cleartext HTTP resources.
+- Added `argusgate rules list|show` with stable detector, policy, baseline, and scanner rule metadata.
+- Added report, policy, and baseline JSON schemas.
+- Added a checksum-verified composite GitHub Action for config, fixture, and URL scans.
+
+### Changed
+
+- Updated the project to Go 1.25 and the official MCP Go SDK.
+- Expanded JSON reports and terminal summaries with protocol, prompt, resource, template, and baseline information.
+- Release archives now include machine-readable schemas.
+- CI now smoke-tests the composite action runner in addition to race tests, vet, and builds.
+
+### Security
+
+- Live inspection blocks redirects, retries, standalone SSE, cross-origin credential forwarding, credentials in URLs, secret-like query parameters, unexpected HTTP methods, and all non-metadata MCP methods.
+- Inspection request size, response size, timeout, pagination, and advertised artifact counts are bounded.
+- Local and live metadata traversal is bounded to prevent excessive nesting from exhausting scanner resources.
+- Permitted live endpoint query values are redacted before URLs enter reports, errors, or baselines.
+- Baselines omit environment/header values and redact secret-like metadata before hashing.
+- Resource URI policy matching now compares URI authorities and path boundaries instead of unsafe string prefixes.
+- Windows output replacement uses atomic replace semantics rather than delete-and-rename behavior.
+
 ## 0.2.5 - 2026-07-13
 
 ### Added
@@ -103,7 +133,6 @@ All notable changes to ArgusGate will be documented in this file.
 - Detected common token shapes in tool, server, config, and fixture metadata.
 - Parsed JSON-RPC-style `result.tools` fixture files from MCP `tools/list` responses.
 - Parsed map-style fixture tool definitions where the map key is the tool name.
-- Ignored `deep-research-report.md` so internal research notes do not get re-added to the public repository.
 
 ## 0.1.1 - 2026-05-26
 

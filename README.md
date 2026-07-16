@@ -1,309 +1,260 @@
 # ArgusGate
 
-ArgusGate is an open-source security scanner and policy gateway for Model Context Protocol servers.
+ArgusGate is an open-source security scanner and policy gateway foundation for Model Context Protocol servers.
 
-It helps developers and DevOps/SecOps teams inspect MCP tool metadata, detect suspicious tool descriptions, identify risky capabilities, validate security policies, and generate CI-friendly reports before connecting AI agents to internal systems.
+It helps teams inspect MCP configs and advertised metadata, detect risky capabilities and suspicious instructions, compare servers against reviewed baselines, enforce policy in CI, and produce JSON or SARIF reports.
 
-ArgusGate is experimental. It performs heuristic static analysis. It is not a complete security boundary and does not replace sandboxing, least-privilege credentials, network isolation, code review, or runtime monitoring.
+ArgusGate is experimental. Its detections are heuristic, and it is not a complete security boundary. Use it alongside sandboxing, least-privilege credentials, network controls, code review, and runtime monitoring.
 
-## Why It Exists
+## What v0.3.0 Adds
 
-MCP servers can expose tools that read files, run commands, query databases, automate browsers, call APIs, and operate infrastructure. A malicious or compromised server can also hide instructions in tool descriptions or leak secrets through config and metadata.
+- Tools, prompts, resources, and resource-template scanning.
+- Reviewed metadata baselines for drift and rug-pull detection.
+- Opt-in HTTPS Streamable HTTP metadata inspection.
+- Policy `0.3` controls for prompts and resource URI namespaces.
+- MCP contract checks for missing tool schemas and contradictory annotations.
+- A searchable stable rule catalog.
+- A checksum-verified composite GitHub Action.
 
-ArgusGate v0.2.5 focuses on a hardened CLI-first scanner: bounded local input parsing, strict policy checks, controlled suppressions, stable finding fingerprints, JSON reports, SARIF output, and CI-ready exit codes.
+Local config and fixture scans remain fully offline. ArgusGate never starts commands from MCP configs.
 
-## Install From Release
+## Install
 
-Download the archive for your operating system and CPU from [GitHub Releases](https://github.com/saqreed/argusgate/releases).
-
-Release archives are published for Linux, macOS, and Windows on `amd64` and `arm64`. Each release also includes `SHA256SUMS.txt`.
+Download the archive for your operating system and CPU from [GitHub Releases](https://github.com/saqreed/argusgate/releases), then verify it against `SHA256SUMS.txt`.
 
 Linux or macOS:
 
 ```bash
-tar -xzf argusgate_v0.2.5_linux_amd64.tar.gz
-cd argusgate_v0.2.5_linux_amd64
+tar -xzf argusgate_v0.3.0_linux_amd64.tar.gz
+cd argusgate_v0.3.0_linux_amd64
 ./argusgate --version
 ```
 
 Windows PowerShell:
 
 ```powershell
-Expand-Archive .\argusgate_v0.2.5_windows_amd64.zip
-cd .\argusgate_v0.2.5_windows_amd64\argusgate_v0.2.5_windows_amd64
+Expand-Archive .\argusgate_v0.3.0_windows_amd64.zip
+cd .\argusgate_v0.3.0_windows_amd64\argusgate_v0.3.0_windows_amd64
 .\argusgate.exe --version
 ```
 
-See [docs/release.md](docs/release.md) for checksum verification and maintainer release notes.
-
-## Install From Source
-
-Requirements:
-
-- Go 1.24 or newer.
+Build from source with Go 1.25 or newer:
 
 ```bash
 mkdir -p bin
 go build -o ./bin/argusgate ./cmd/argusgate
 ```
 
-Windows PowerShell:
-
-```powershell
-New-Item -ItemType Directory -Force bin | Out-Null
-go build -o .\bin\argusgate.exe .\cmd\argusgate
-```
-
-During development:
-
-```bash
-go run ./cmd/argusgate --help
-```
-
 ## Quick Start
 
-Validate the example policy:
+Validate a policy:
 
 ```bash
-go run ./cmd/argusgate policy validate --policy examples/policies/default.yaml
+./bin/argusgate policy validate --policy examples/policies/default.yaml
 ```
 
-Scan the safe fixture:
+Scan a safe local fixture:
 
 ```bash
-go run ./cmd/argusgate fixtures scan --path examples/fixtures/safe-tools.yaml --policy examples/policies/default.yaml --report safe-report.json
-```
-
-Scan the malicious fixture:
-
-```bash
-go run ./cmd/argusgate fixtures scan --path examples/fixtures/malicious-tools.yaml --policy examples/policies/default.yaml --report malicious-report.json
-```
-
-The malicious fixture is expected to exit `1` because it contains high-severity findings.
-
-Write JSON and SARIF reports:
-
-```bash
-go run ./cmd/argusgate fixtures scan \
-  --path examples/fixtures/malicious-tools.yaml \
+./bin/argusgate fixtures scan \
+  --path examples/fixtures/safe-tools.yaml \
   --policy examples/policies/default.yaml \
-  --report malicious-report.json \
-  --sarif malicious.sarif
+  --report safe-report.json
 ```
 
-Emit JSON to stdout:
+Scan the v0.3 metadata catalog:
 
 ```bash
-go run ./cmd/argusgate fixtures scan --path examples/fixtures/safe-tools.yaml --format json
+./bin/argusgate fixtures scan \
+  --path examples/fixtures/v03-metadata.yaml \
+  --policy examples/policies/v03-trust.yaml \
+  --report v03-report.json \
+  --sarif v03.sarif
 ```
 
-Emit SARIF to stdout:
+The v0.3 fixture intentionally contains high-risk metadata and is expected to exit `1`.
+
+## Baseline Workflow
+
+Create a reviewed baseline:
 
 ```bash
-go run ./cmd/argusgate fixtures scan --path examples/fixtures/malicious-tools.yaml --format sarif
+./bin/argusgate baseline create \
+  --fixtures examples/fixtures/safe-tools.yaml \
+  --output argusgate-baseline.json
 ```
 
-Override the policy fail threshold:
+Fail CI if an artifact is added or its reviewed contract changes:
 
 ```bash
-go run ./cmd/argusgate fixtures scan --path examples/fixtures/safe-tools.yaml --policy examples/policies/default.yaml --fail-on medium
+./bin/argusgate fixtures scan \
+  --path examples/fixtures/safe-tools.yaml \
+  --baseline argusgate-baseline.json \
+  --report argusgate-report.json
 ```
 
-Scan a local MCP config:
+Refresh a baseline only after reviewing the new metadata:
 
 ```bash
-go run ./cmd/argusgate scan --config examples/configs/mcp-config.yaml --policy examples/policies/default.yaml --report config-report.json
+./bin/argusgate baseline update \
+  --fixtures examples/fixtures/safe-tools.yaml \
+  --baseline argusgate-baseline.json
 ```
+
+Baselines store normalized SHA-256 identities and contract hashes. Environment and header values are not stored.
+
+## Opt-In Live Inspection
+
+Live inspection is explicit and metadata-only:
+
+```bash
+./bin/argusgate inspect \
+  --url https://mcp.example.test/mcp \
+  --policy examples/policies/v03-trust.yaml \
+  --report live-report.json \
+  --sarif live.sarif
+```
+
+Use an environment-backed bearer token when required:
+
+```bash
+export MCP_INSPECTION_TOKEN="replace-with-runtime-secret"
+./bin/argusgate inspect \
+  --url https://mcp.example.test/mcp \
+  --token-env MCP_INSPECTION_TOKEN
+```
+
+Inspection accepts HTTPS Streamable HTTP endpoints only. Redirects, standalone SSE, retries, credentials in URLs, secret-like query parameters, cross-origin requests, `tools/call`, `prompts/get`, and `resources/read` are blocked. Values of any permitted query parameters are redacted before the endpoint is stored in reports or baselines.
 
 ## CLI
 
 ```text
 argusgate --help
 argusgate --version
-argusgate scan --config <path> [--policy <path>] [--report <path>] [--sarif <path>] [--fail-on high] [--format text|json|sarif] [--quiet]
+argusgate scan --config <path> [scan flags]
+argusgate fixtures scan --path <path> [scan flags]
+argusgate inspect --url <https-url> [scan flags] [inspection flags]
 argusgate policy validate --policy <path>
-argusgate fixtures scan --path <path> [--policy <path>] [--report <path>] [--sarif <path>] [--fail-on high] [--format text|json|sarif] [--quiet]
+argusgate baseline create (--config <path> | --fixtures <path> | --url <https-url>) --output <path>
+argusgate baseline update (--config <path> | --fixtures <path> | --url <https-url>) --baseline <path>
+argusgate rules list [--format text|json]
+argusgate rules show <rule-id> [--format text|json]
 ```
+
+Scan flags:
+
+- `--policy <path>`
+- `--baseline <path>`
+- `--report <path>`
+- `--sarif <path>`
+- `--fail-on low|medium|high|critical`
+- `--format text|json|sarif`
+- `--quiet`
 
 Exit codes:
 
-- `0`: no findings at or above the configured fail level
-- `1`: findings at or above the configured fail level
-- `2`: invalid config, invalid policy, parser error, report write error, or internal error
+- `0`: no unsuppressed finding meets the fail threshold
+- `1`: one or more unsuppressed findings meet the fail threshold
+- `2`: invalid input, invalid policy, inspection failure, output failure, or internal error
 
-## Policy Example
+## Policy 0.3
 
 ```yaml
-version: "0.1"
-project:
-  name: "argusgate-example"
+version: "0.3"
 defaults:
-  fail_on: "high"
+  fail_on: high
   allow_unknown_tools: true
+  allow_unknown_prompts: false
+  allow_unknown_resources: false
 rules:
   deny_tools:
-    - "shell_exec"
-    - "run_command"
-    - "file_write"
-  deny_keywords:
-    - "ignore previous instructions"
-    - "do not tell the user"
-    - "private key"
-    - "exfiltrate"
-  paths:
-    deny:
-      - "~/.ssh"
-      - "/etc"
-      - ".env"
-      - "kubeconfig"
+    - shell_exec
+  allow_prompts:
+    - review_release
+  deny_prompts:
+    - hidden_override
+  resource_uris:
     allow:
-      - "./examples"
-      - "./testdata"
-servers:
-  local-filesystem:
-    allow_tools:
-      - "read_file"
-      - "list_directory"
-    deny_tools:
-      - "write_file"
-      - "delete_file"
+      - file:///workspace/docs
+      - https://docs.example.test/public
+    deny:
+      - file:///home/example/.ssh
 ```
 
-Policy precedence is documented in [docs/policy-format.md](docs/policy-format.md).
+Policies `0.1` and `0.2` remain supported. Prompt and resource rules require `version: "0.3"`. Full precedence and suppression behavior are documented in [docs/policy-format.md](docs/policy-format.md).
 
-v0.2 policies can suppress reviewed findings by stable fingerprint:
+## GitHub Action
+
+The composite action downloads the selected ArgusGate release and verifies its archive against the published SHA-256 checksum before execution.
 
 ```yaml
-version: "0.2"
-rules:
-  suppressions:
-    - fingerprint: "0000000000000000000000000000000000000000000000000000000000000000"
-      reason: "accepted local fixture risk"
-      expires: "2099-12-31"
+name: ArgusGate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan MCP metadata
+        id: argusgate
+        uses: saqreed/argusgate@v0.3.0
+        with:
+          source-type: fixtures
+          source: examples/fixtures/v03-metadata.yaml
+          policy: examples/policies/v03-trust.yaml
+          report: argusgate-report.json
+          sarif: argusgate.sarif
+
+      - name: Upload SARIF
+        if: always() && hashFiles('argusgate.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.argusgate.outputs.sarif }}
 ```
 
-Suppressed findings remain visible in JSON reports with `suppressed: true`, but they do not affect the scan exit code.
+Pin the action to a release tag. For live inspection, pass only the environment variable name through `token-env`; store the value in GitHub Actions secrets.
 
-## JSON Report
+## Reports And Schemas
 
-Reports include:
+JSON reports include server and metadata summaries, findings, stable fingerprints, unsuppressed severity totals, policy summary, optional baseline summary, and the exit decision.
 
-- `scanned_at`
-- `argusgate_version`
-- `source_type`
-- `source_path`
-- `servers`
-- `tools`
-- `findings`
-- `severity_summary`
-- `policy_summary`
-- `exit_decision`
+- [Report schema](docs/schemas/report.schema.json)
+- [Policy schema](docs/schemas/policy.schema.json)
+- [Baseline schema](docs/schemas/baseline.schema.json)
 
-Example shape:
-
-```json
-{
-  "scanned_at": "2026-05-22T12:00:00Z",
-  "argusgate_version": "0.2.5",
-  "source_type": "fixtures",
-  "source_path": "examples/fixtures/malicious-tools.yaml",
-  "servers": [],
-  "tools": [],
-  "findings": [],
-  "severity_summary": {
-    "critical": 0,
-    "high": 0,
-    "info": 0,
-    "low": 0,
-    "medium": 0
-  },
-  "policy_summary": {},
-  "exit_decision": {}
-}
-```
-
-Finding evidence is redacted when it looks secret-like.
-
-The report schema is available at [docs/schemas/report.schema.json](docs/schemas/report.schema.json). The policy schema is available at [docs/schemas/policy.schema.json](docs/schemas/policy.schema.json).
-
-## SARIF And GitHub Code Scanning
-
-ArgusGate can write SARIF 2.1.0 for GitHub Code Scanning:
-
-```bash
-go run ./cmd/argusgate fixtures scan \
-  --path examples/fixtures/malicious-tools.yaml \
-  --policy examples/policies/default.yaml \
-  --sarif argusgate.sarif
-```
-
-Example GitHub Actions snippet:
-
-```yaml
-- name: Build ArgusGate
-  run: go build -o ./bin/argusgate ./cmd/argusgate
-
-- name: ArgusGate scan
-  run: |
-    ./bin/argusgate fixtures scan \
-      --path examples/fixtures/malicious-tools.yaml \
-      --policy examples/policies/default.yaml \
-      --report argusgate-report.json \
-      --sarif argusgate.sarif
-
-- name: Upload ArgusGate SARIF
-  if: always()
-  uses: github/codeql-action/upload-sarif@641a925cfafe92d0fdf8b239ba4053e3f8d99d6d # v3
-  with:
-    sarif_file: argusgate.sarif
-```
-
-## CI Usage
-
-Example GitHub Actions step:
-
-```yaml
-- name: ArgusGate fixture scan
-  run: |
-    go run ./cmd/argusgate fixtures scan \
-      --path examples/fixtures/malicious-tools.yaml \
-      --policy examples/policies/default.yaml \
-      --report argusgate-report.json
-```
-
-The repository CI runs:
-
-```bash
-go mod verify
-go test -race ./...
-go vet ./...
-mkdir -p bin && go build -o ./bin/argusgate ./cmd/argusgate
-```
+SARIF output uses SARIF 2.1.0 and omits suppressed findings.
 
 ## Current Limitations
 
-- Static analysis is heuristic and can miss issues.
-- Findings can include false positives.
-- The scanner does not connect to live MCP servers.
-- The scanner does not execute tool commands or invoke MCP tools.
-- Input files are limited to 16 MiB, policies to 1 MiB, and reports to 10,000 retained findings per scan.
-- Strict policy parsing rejects unknown fields, empty rule entries, ambiguous normalized keys, and unsupported v0.1 suppressions.
-- No runtime proxy/gateway is implemented in v0.2.5.
-- No database, web UI, OAuth/RBAC, Kubernetes deployment, or SaaS workflow is included.
+- Static findings can include false positives and false negatives.
+- Live inspection verifies advertised metadata, not server implementation behavior.
+- Only HTTPS Streamable HTTP metadata inspection is supported.
+- OAuth browser flows, stdio server startup, tool calls, prompt retrieval, and resource reads are not implemented.
+- Baselines detect metadata/config drift but do not prove artifact provenance.
+- No runtime proxy, database, web UI, RBAC, Kubernetes deployment, or SaaS service is included.
+- Inputs and reports are bounded to reduce resource-exhaustion risk.
+- Live inspection has a 15-second default timeout, 16 MiB per-response limit, 64 MiB session-response budget, 100-page limit, and 10,000-artifact limit.
 
 ## Roadmap
 
-- More fixture coverage and detector tuning.
-- Packaged reusable GitHub Action.
-- Tool pinning and rug-pull detection.
-- Optional live MCP metadata inspection.
-- Runtime MCP gateway/proxy after the scanner and policy engine stabilize.
-- Audit logging and telemetry for future runtime enforcement.
+- More MCP contract and metadata consistency checks.
+- Signed release provenance and stronger supply-chain verification.
+- Better baseline review output and machine-readable diffs.
+- Additional opt-in authentication methods for metadata inspection.
+- Runtime gateway enforcement only after the scanner and policy model stabilize.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Keep examples safe and local. Never include real credentials in issues, docs, fixtures, tests, or reports.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Never include real credentials in issues, fixtures, tests, reports, or documentation.
 
 ## License
 

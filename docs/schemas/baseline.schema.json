@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/saqreed/argusgate/docs/schemas/baseline.schema.json",
+  "title": "ArgusGate Baseline",
+  "type": "object",
+  "required": [
+    "version",
+    "argusgate_version",
+    "created_at",
+    "servers",
+    "artifacts"
+  ],
+  "properties": {
+    "version": { "const": "0.1" },
+    "argusgate_version": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "protocol_version": { "type": "string" },
+    "servers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/server" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "server": {
+      "type": "object",
+      "required": ["identity", "id", "contract_hash"],
+      "properties": {
+        "identity": { "$ref": "#/$defs/sha256" },
+        "id": { "type": "string" },
+        "contract_hash": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "kind",
+        "server_identity",
+        "subject_identity",
+        "name",
+        "contract_hash"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["tool", "prompt", "resource", "resource_template"]
+        },
+        "server_identity": { "$ref": "#/$defs/sha256" },
+        "subject_identity": { "$ref": "#/$defs/sha256" },
+        "name": { "type": "string" },
+        "contract_hash": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

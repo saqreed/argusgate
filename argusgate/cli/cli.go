@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/saqreed/argusgate/argusgate/baseline"
 	"github.com/saqreed/argusgate/argusgate/internal/fileio"
 	"github.com/saqreed/argusgate/argusgate/internal/redact"
 	"github.com/saqreed/argusgate/argusgate/policy"
@@ -18,12 +19,13 @@ import (
 )
 
 type scanOptions struct {
-	policyPath string
-	reportPath string
-	sarifPath  string
-	failOn     string
-	format     string
-	quiet      bool
+	policyPath   string
+	reportPath   string
+	sarifPath    string
+	baselinePath string
+	failOn       string
+	format       string
+	quiet        bool
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -43,6 +45,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runPolicy(args[1:], stdout, stderr)
 	case "fixtures":
 		return runFixtures(args[1:], stdout, stderr)
+	case "inspect":
+		return runInspect(args[1:], stdout, stderr)
+	case "baseline":
+		return runBaseline(args[1:], stdout, stderr)
+	case "rules":
+		return runRules(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", args[0])
 		printHelp(stderr)
@@ -79,11 +87,18 @@ func runScan(args []string, stdout, stderr io.Writer) int {
 		writeCLIError(stderr, err)
 		return 2
 	}
-	if err := validateOutputPaths(*configPath, opts.policyPath, opts.reportPath, opts.sarifPath); err != nil {
+	loadedBaseline, err := loadBaseline(opts.baselinePath)
+	if err != nil {
 		writeCLIError(stderr, err)
 		return 2
 	}
-	r, err := scanner.ScanConfig(*configPath, p)
+	if err := validateOutputPaths(*configPath, opts.policyPath, opts.baselinePath, opts.reportPath, opts.sarifPath); err != nil {
+		writeCLIError(stderr, err)
+		return 2
+	}
+	r, err := scanner.ScanConfigWithOptions(*configPath, p, scanner.Options{
+		Baseline: loadedBaseline, BaselinePath: opts.baselinePath,
+	})
 	if err != nil {
 		writeCLIError(stderr, err)
 		return 2
@@ -163,11 +178,18 @@ func runFixtures(args []string, stdout, stderr io.Writer) int {
 		writeCLIError(stderr, err)
 		return 2
 	}
-	if err := validateOutputPaths(*fixturePath, opts.policyPath, opts.reportPath, opts.sarifPath); err != nil {
+	loadedBaseline, err := loadBaseline(opts.baselinePath)
+	if err != nil {
 		writeCLIError(stderr, err)
 		return 2
 	}
-	r, err := scanner.ScanFixtures(*fixturePath, p)
+	if err := validateOutputPaths(*fixturePath, opts.policyPath, opts.baselinePath, opts.reportPath, opts.sarifPath); err != nil {
+		writeCLIError(stderr, err)
+		return 2
+	}
+	r, err := scanner.ScanFixturesWithOptions(*fixturePath, p, scanner.Options{
+		Baseline: loadedBaseline, BaselinePath: opts.baselinePath,
+	})
 	if err != nil {
 		writeCLIError(stderr, err)
 		return 2
@@ -180,10 +202,22 @@ func newScanOptions(fs *flag.FlagSet) *scanOptions {
 	fs.StringVar(&opts.policyPath, "policy", "", "path to policy YAML")
 	fs.StringVar(&opts.reportPath, "report", "", "path to write JSON report")
 	fs.StringVar(&opts.sarifPath, "sarif", "", "path to write SARIF 2.1.0 report")
+	fs.StringVar(&opts.baselinePath, "baseline", "", "path to reviewed ArgusGate baseline JSON")
 	fs.StringVar(&opts.failOn, "fail-on", "", "override policy fail_on: low, medium, high, or critical")
 	fs.StringVar(&opts.format, "format", "text", "stdout format: text, json, or sarif")
 	fs.BoolVar(&opts.quiet, "quiet", false, "suppress text summary; errors still go to stderr")
 	return opts
+}
+
+func loadBaseline(path string) (*baseline.File, error) {
+	if path == "" {
+		return nil, nil
+	}
+	value, err := baseline.LoadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return &value, nil
 }
 
 func loadPolicyOrDefault(path string) (policy.Policy, error) {
@@ -272,16 +306,25 @@ Usage:
   argusgate scan --config <path> [--policy <path>] [--report <path>] [--sarif <path>] [--fail-on high] [--format text|json|sarif] [--quiet]
   argusgate policy validate --policy <path>
   argusgate fixtures scan --path <path> [--policy <path>] [--report <path>] [--sarif <path>] [--fail-on high] [--format text|json|sarif] [--quiet]
+  argusgate inspect --url <https-url> [scan flags] [--timeout 15s] [--token-env ENV] [--header-env Header=ENV]
+  argusgate baseline create (--config <path> | --fixtures <path> | --url <https-url>) --output <path>
+  argusgate baseline update (--config <path> | --fixtures <path> | --url <https-url>) --baseline <path>
+  argusgate rules list [--format text|json]
+  argusgate rules show <rule-id> [--format text|json]
 
 Commands:
   scan            Scan a local MCP-style config file. Does not start servers or execute commands.
   policy validate Validate policy syntax and severity thresholds.
   fixtures scan   Scan local MCP tool metadata fixtures for detector development and CI.
+  inspect         Read metadata from an explicitly selected HTTPS MCP endpoint. Never calls tools or reads resources.
+  baseline        Create or update a reviewed metadata baseline for drift and rug-pull detection.
+  rules           List detector, policy, baseline, and scanner rule metadata.
 
 Scan flags:
   --policy <path>   Optional YAML policy. Missing policy uses safe MVP defaults.
   --report <path>   Optional JSON report output path.
   --sarif <path>    Optional SARIF 2.1.0 report output path.
+  --baseline <path> Optional reviewed baseline used to detect metadata drift.
   --fail-on <level> Override policy fail_on. Valid: low, medium, high, critical.
   --format <format> Stdout format. Valid: text, json, sarif. Default: text.
   --quiet           Suppress text summary. Errors still print to stderr.
@@ -308,7 +351,7 @@ func rejectUnexpectedArgs(fs *flag.FlagSet) error {
 	return fmt.Errorf("unexpected argument(s): %s", strings.Join(fs.Args(), " "))
 }
 
-func validateOutputPaths(inputPath, policyPath, reportPath, sarifPath string) error {
+func validateOutputPaths(inputPath, policyPath, baselinePath, reportPath, sarifPath string) error {
 	outputs := []struct {
 		name string
 		path string
@@ -322,6 +365,7 @@ func validateOutputPaths(inputPath, policyPath, reportPath, sarifPath string) er
 	}{
 		{"scan input", inputPath},
 		{"policy", policyPath},
+		{"baseline", baselinePath},
 	}
 
 	for _, output := range outputs {

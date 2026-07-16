@@ -45,9 +45,17 @@ func (d SecretExposureDetector) ScanServer(server mcp.ServerConfig) []report.Fin
 }
 
 func (d SecretExposureDetector) ScanTool(tool mcp.ToolDefinition) []report.Finding {
+	return d.ScanArtifact(mcp.ArtifactFromTool(tool))
+}
+
+func (d SecretExposureDetector) ScanArtifact(artifact mcp.Artifact) []report.Finding {
 	var findings []report.Finding
-	for _, blob := range mcp.ToolTextBlobs(tool) {
-		findings = append(findings, secretFindings(tool.ServerID, tool.Name, blob.Location, blob.Text)...)
+	for _, blob := range mcp.ArtifactTextBlobs(artifact) {
+		found := secretFindings(artifact.ServerID, "", blob.Location, blob.Text)
+		for i := range found {
+			found[i] = withArtifactIdentity(found[i], artifact)
+		}
+		findings = append(findings, found...)
 	}
 	return findings
 }

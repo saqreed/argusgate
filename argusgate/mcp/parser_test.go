@@ -84,6 +84,73 @@ result:
 	}
 }
 
+func TestLoadFixturesParsesAllMCPMetadataKinds(t *testing.T) {
+	path := writeTempFile(t, `
+protocolVersion: "2025-11-25"
+prompts:
+  review:
+    description: Review a file.
+    arguments:
+      - name: path
+        required: true
+resources:
+  docs:
+    uri: file:///docs
+    mimeType: text/plain
+resourceTemplates:
+  files:
+    uriTemplate: file:///{path}
+    description: Files by path.
+tools:
+  read_file:
+    description: Read a file.
+    inputSchema:
+      type: object
+`)
+
+	doc, err := LoadFixtures(path)
+	if err != nil {
+		t.Fatalf("LoadFixtures failed: %v", err)
+	}
+	if doc.ProtocolVersion != "2025-11-25" {
+		t.Fatalf("unexpected protocol version: %q", doc.ProtocolVersion)
+	}
+	if len(doc.Tools) != 1 || len(doc.Prompts) != 1 || len(doc.Resources) != 1 || len(doc.ResourceTemplates) != 1 {
+		t.Fatalf("unexpected metadata counts: tools=%d prompts=%d resources=%d templates=%d", len(doc.Tools), len(doc.Prompts), len(doc.Resources), len(doc.ResourceTemplates))
+	}
+	if len(doc.Prompts[0].Arguments) != 1 || !doc.Prompts[0].Arguments[0].Required {
+		t.Fatalf("prompt arguments were not parsed: %#v", doc.Prompts[0])
+	}
+	if doc.Resources[0].URI != "file:///docs" || doc.ResourceTemplates[0].URITemplate != "file:///{path}" {
+		t.Fatalf("resource metadata was not parsed: %#v %#v", doc.Resources[0], doc.ResourceTemplates[0])
+	}
+	if len(doc.Servers) != 1 || len(doc.Servers[0].Prompts) != 1 || len(doc.Servers[0].Resources) != 1 {
+		t.Fatalf("synthetic server did not receive metadata: %#v", doc.Servers)
+	}
+}
+
+func TestLoadFixturesParsesJSONRPCResultMetadata(t *testing.T) {
+	path := writeTempFile(t, `
+result:
+  prompts:
+    - name: review
+  resources:
+    - name: docs
+      uri: file:///docs
+  resourceTemplates:
+    - name: files
+      uriTemplate: file:///{path}
+`)
+
+	doc, err := LoadFixtures(path)
+	if err != nil {
+		t.Fatalf("LoadFixtures failed: %v", err)
+	}
+	if len(doc.Prompts) != 1 || len(doc.Resources) != 1 || len(doc.ResourceTemplates) != 1 {
+		t.Fatalf("unexpected JSON-RPC metadata: %#v", doc)
+	}
+}
+
 func TestLoadFixturesParsesToolMap(t *testing.T) {
 	path := writeTempFile(t, `
 tools:
@@ -173,6 +240,30 @@ func TestLoadDocumentRejectsMissingNamesAndDuplicates(t *testing.T) {
 	}
 }
 
+func TestLoadDocumentRejectsMissingResourceURIsAndDuplicatePrompts(t *testing.T) {
+	missingURI := writeTempFile(t, "resources:\n  - name: docs\n")
+	if _, err := LoadFixtures(missingURI); err == nil || !strings.Contains(err.Error(), "uri is required") {
+		t.Fatalf("expected missing resource URI error, got %v", err)
+	}
+
+	duplicate := writeTempFile(t, "prompts:\n  - name: review\n  - name: REVIEW\n")
+	if _, err := LoadFixtures(duplicate); err == nil || !strings.Contains(err.Error(), "duplicate prompt") {
+		t.Fatalf("expected duplicate prompt error, got %v", err)
+	}
+}
+
+func TestLoadDocumentRejectsInvalidPromptArguments(t *testing.T) {
+	missingName := writeTempFile(t, "prompts:\n  - name: review\n    arguments:\n      - required: true\n")
+	if _, err := LoadFixtures(missingName); err == nil || !strings.Contains(err.Error(), "arguments[0].name is required") {
+		t.Fatalf("expected missing prompt argument name, got %v", err)
+	}
+
+	duplicate := writeTempFile(t, "prompts:\n  - name: review\n    arguments:\n      - name: path\n      - name: PATH\n")
+	if _, err := LoadFixtures(duplicate); err == nil || !strings.Contains(err.Error(), "duplicate prompt argument") {
+		t.Fatalf("expected duplicate prompt argument, got %v", err)
+	}
+}
+
 func TestLoadDocumentRejectsInvalidKnownFieldType(t *testing.T) {
 	path := writeTempFile(t, "mcpServers:\n  local:\n    command: 42\n")
 	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "command: expected string") {
@@ -201,6 +292,23 @@ func TestLoadDocumentRejectsOversizedInput(t *testing.T) {
 	}
 	if _, err := LoadFixtures(path); err == nil || !strings.Contains(err.Error(), "maximum") {
 		t.Fatalf("expected size limit error, got %v", err)
+	}
+}
+
+func TestLoadDocumentRejectsExcessiveNesting(t *testing.T) {
+	nested := strings.Repeat(`{"x":`, MaxNestingDepth+2) + `"value"` + strings.Repeat("}", MaxNestingDepth+2)
+	path := writeTempFile(t, `{"tools":[{"name":"deep","inputSchema":{"type":"object","nested":`+nested+`}}]}`)
+	if _, err := LoadFixtures(path); err == nil || !strings.Contains(err.Error(), "nesting exceeds maximum depth") {
+		t.Fatalf("expected nesting limit error, got %v", err)
+	}
+}
+
+func TestLoadDocumentRejectsInvalidResourceSize(t *testing.T) {
+	for _, size := range []string{"-1", "1.5"} {
+		path := writeTempFile(t, "resources:\n  - name: docs\n    uri: file:///docs\n    size: "+size+"\n")
+		if _, err := LoadFixtures(path); err == nil || !strings.Contains(err.Error(), "non-negative integer") {
+			t.Fatalf("expected invalid resource size for %s, got %v", size, err)
+		}
 	}
 }
 

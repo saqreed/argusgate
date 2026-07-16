@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/saqreed/argusgate/argusgate/internal/fileio"
+	"github.com/saqreed/argusgate/argusgate/mcp"
 	"github.com/saqreed/argusgate/argusgate/scanner/severity"
 	"gopkg.in/yaml.v3"
 )
@@ -30,9 +31,11 @@ type rawPolicy struct {
 }
 
 type rawDefaults struct {
-	FailOn            string `yaml:"fail_on"`
-	AllowedSeverity   string `yaml:"allowed_severity"`
-	AllowUnknownTools *bool  `yaml:"allow_unknown_tools"`
+	FailOn                string `yaml:"fail_on"`
+	AllowedSeverity       string `yaml:"allowed_severity"`
+	AllowUnknownTools     *bool  `yaml:"allow_unknown_tools"`
+	AllowUnknownPrompts   *bool  `yaml:"allow_unknown_prompts"`
+	AllowUnknownResources *bool  `yaml:"allow_unknown_resources"`
 }
 
 func LoadFile(path string) (Policy, error) {
@@ -81,7 +84,7 @@ func Validate(p Policy) error {
 	if p.Version == "" {
 		return fmt.Errorf("policy version is required")
 	}
-	if p.Version != "0.1" && p.Version != "0.2" {
+	if p.Version != "0.1" && p.Version != "0.2" && p.Version != "0.3" {
 		return fmt.Errorf("unsupported policy version %q", p.Version)
 	}
 	if !p.Defaults.FailOn.IsValid() {
@@ -94,7 +97,7 @@ func Validate(p Policy) error {
 		return fmt.Errorf("invalid allowed_severity %q", p.Defaults.AllowedSeverity)
 	}
 	if p.Version == "0.1" && len(p.Rules.Suppressions) > 0 {
-		return fmt.Errorf("rules.suppressions requires policy version \"0.2\"")
+		return fmt.Errorf("rules.suppressions requires policy version \"0.2\" or newer")
 	}
 	if len(p.Rules.Suppressions) > maxPolicyListEntries {
 		return fmt.Errorf("rules.suppressions has %d entries; maximum is %d", len(p.Rules.Suppressions), maxPolicyListEntries)
@@ -128,6 +131,9 @@ func fromRaw(raw rawPolicy) (Policy, error) {
 	if strings.TrimSpace(raw.Version) == "" {
 		return Policy{}, fmt.Errorf("policy version is required")
 	}
+	if raw.Version != "0.3" && rawUsesV03Fields(raw) {
+		return Policy{}, fmt.Errorf("prompt and resource trust rules require policy version \"0.3\"")
+	}
 	p := Default()
 	p.Version = raw.Version
 	p.Project = raw.Project
@@ -140,6 +146,16 @@ func fromRaw(raw rawPolicy) (Policy, error) {
 		p.Defaults.AllowUnknownTools = true
 	} else {
 		p.Defaults.AllowUnknownTools = *raw.Defaults.AllowUnknownTools
+	}
+	if raw.Defaults.AllowUnknownPrompts == nil {
+		p.Defaults.AllowUnknownPrompts = true
+	} else {
+		p.Defaults.AllowUnknownPrompts = *raw.Defaults.AllowUnknownPrompts
+	}
+	if raw.Defaults.AllowUnknownResources == nil {
+		p.Defaults.AllowUnknownResources = true
+	} else {
+		p.Defaults.AllowUnknownResources = *raw.Defaults.AllowUnknownResources
 	}
 
 	if strings.TrimSpace(raw.Defaults.AllowedSeverity) != "" {
@@ -166,6 +182,23 @@ func fromRaw(raw rawPolicy) (Policy, error) {
 	return p, nil
 }
 
+func rawUsesV03Fields(raw rawPolicy) bool {
+	if raw.Defaults.AllowUnknownPrompts != nil || raw.Defaults.AllowUnknownResources != nil {
+		return true
+	}
+	if len(raw.Rules.AllowPrompts) > 0 || len(raw.Rules.DenyPrompts) > 0 ||
+		len(raw.Rules.ResourceURIs.Allow) > 0 || len(raw.Rules.ResourceURIs.Deny) > 0 {
+		return true
+	}
+	for _, rule := range raw.Servers {
+		if len(rule.AllowPrompts) > 0 || len(rule.DenyPrompts) > 0 ||
+			len(rule.ResourceURIs.Allow) > 0 || len(rule.ResourceURIs.Deny) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func validatePolicyLists(p Policy) error {
 	type listRule struct {
 		name   string
@@ -174,9 +207,13 @@ func validatePolicyLists(p Policy) error {
 	lists := []listRule{
 		{"rules.allow_tools", p.Rules.AllowTools},
 		{"rules.deny_tools", p.Rules.DenyTools},
+		{"rules.allow_prompts", p.Rules.AllowPrompts},
+		{"rules.deny_prompts", p.Rules.DenyPrompts},
 		{"rules.deny_keywords", p.Rules.DenyKeywords},
 		{"rules.paths.allow", p.Rules.Paths.Allow},
 		{"rules.paths.deny", p.Rules.Paths.Deny},
+		{"rules.resource_uris.allow", p.Rules.ResourceURIs.Allow},
+		{"rules.resource_uris.deny", p.Rules.ResourceURIs.Deny},
 	}
 	serverIDs := make([]string, 0, len(p.Servers))
 	for serverID := range p.Servers {
@@ -188,6 +225,10 @@ func validatePolicyLists(p Policy) error {
 		lists = append(lists,
 			listRule{"servers." + serverID + ".allow_tools", rule.AllowTools},
 			listRule{"servers." + serverID + ".deny_tools", rule.DenyTools},
+			listRule{"servers." + serverID + ".allow_prompts", rule.AllowPrompts},
+			listRule{"servers." + serverID + ".deny_prompts", rule.DenyPrompts},
+			listRule{"servers." + serverID + ".resource_uris.allow", rule.ResourceURIs.Allow},
+			listRule{"servers." + serverID + ".resource_uris.deny", rule.ResourceURIs.Deny},
 		)
 	}
 	for _, list := range lists {
@@ -204,16 +245,19 @@ func validatePolicyLists(p Policy) error {
 }
 
 func normalizePolicyKeys(value any) (any, error) {
-	return normalizePolicyValue("", value)
+	return normalizePolicyValue("", value, 0)
 }
 
-func normalizePolicyValue(parentKey string, value any) (any, error) {
+func normalizePolicyValue(parentKey string, value any, depth int) (any, error) {
+	if depth > mcp.MaxNestingDepth {
+		return nil, fmt.Errorf("policy nesting exceeds maximum depth of %d", mcp.MaxNestingDepth)
+	}
 	switch typed := value.(type) {
 	case map[string]any:
 		if parentKey == "servers" {
 			out := make(map[string]any, len(typed))
 			for key, item := range typed {
-				normalized, err := normalizePolicyValue("server_rule", item)
+				normalized, err := normalizePolicyValue("server_rule", item, depth+1)
 				if err != nil {
 					return nil, err
 				}
@@ -228,7 +272,7 @@ func normalizePolicyValue(parentKey string, value any) (any, error) {
 			if prior, exists := original[normalizedKey]; exists && prior != key {
 				return nil, fmt.Errorf("keys %q and %q normalize to the same field %q", prior, key, normalizedKey)
 			}
-			normalized, err := normalizePolicyValue(normalizedKey, item)
+			normalized, err := normalizePolicyValue(normalizedKey, item, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -244,7 +288,7 @@ func normalizePolicyValue(parentKey string, value any) (any, error) {
 				if !ok {
 					return nil, fmt.Errorf("policy mapping keys must be strings, got %T", key)
 				}
-				normalized, err := normalizePolicyValue("server_rule", item)
+				normalized, err := normalizePolicyValue("server_rule", item, depth+1)
 				if err != nil {
 					return nil, err
 				}
@@ -263,7 +307,7 @@ func normalizePolicyValue(parentKey string, value any) (any, error) {
 			if prior, exists := original[normalizedKey]; exists && prior != originalKey {
 				return nil, fmt.Errorf("keys %q and %q normalize to the same field %q", prior, originalKey, normalizedKey)
 			}
-			normalized, err := normalizePolicyValue(normalizedKey, item)
+			normalized, err := normalizePolicyValue(normalizedKey, item, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -274,7 +318,7 @@ func normalizePolicyValue(parentKey string, value any) (any, error) {
 	case []any:
 		out := make([]any, len(typed))
 		for i, item := range typed {
-			normalized, err := normalizePolicyValue(parentKey, item)
+			normalized, err := normalizePolicyValue(parentKey, item, depth+1)
 			if err != nil {
 				return nil, err
 			}
