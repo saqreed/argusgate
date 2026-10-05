@@ -14,10 +14,6 @@ type rule struct {
 var redactors = []rule{
 	{regexp.MustCompile(`(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)(Basic\s+)([A-Za-z0-9+/=]{8,})`), `${1}[REDACTED_SECRET]`},
-	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token)\s*[:=]\s*")([^"]*)(")`), `${1}[REDACTED_SECRET]${3}`},
-	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token)\s*[:=]\s*')([^']*)(')`), `${1}[REDACTED_SECRET]${3}`},
-	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|passwd|secret|private[_-]?key|authorization|access[_-]?token)\s*[:=]\s*["']?)([^"'\s,;]{4,})`), `${1}[REDACTED_SECRET]`},
-	{regexp.MustCompile(`(?i)(--(?:api[_-]?key|token|password|passwd|secret|authorization|access[_-]?token)\s+)([^\s,;]{4,})`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)((?:postgres|postgresql|mysql|mongodb|redis|amqp)://)([^\s"']+)`), `${1}[REDACTED_SECRET]`},
 	{regexp.MustCompile(`(?i)((?:https?|mcp)://)([^@\s"']+:[^@\s"']+)(@)`), `${1}[REDACTED_SECRET]${3}`},
 	{regexp.MustCompile(`(?i)([?&](?:api[_-]?key|token|password|passwd|secret|access[_-]?token)=)([^&#\s"']+)`), `${1}[REDACTED_SECRET]`},
@@ -41,11 +37,37 @@ func Text(value string) string {
 	for _, redactor := range redactors {
 		result = redactor.rx.ReplaceAllString(result, redactor.replacement)
 	}
-	return result
+	var out strings.Builder
+	previous := 0
+	for _, span := range secretAssignments(result, -1, allAssignments) {
+		out.WriteString(result[previous:span.valueStart])
+		if span.quote != 0 {
+			out.WriteByte(span.quote)
+		}
+		out.WriteString("[REDACTED_SECRET]")
+		if span.quote != 0 {
+			out.WriteByte(span.quote)
+		}
+		previous = span.end
+	}
+	if previous == 0 {
+		return result
+	}
+	out.WriteString(result[previous:])
+	return out.String()
 }
 
 func IsSensitiveKey(value string) bool {
-	return sensitiveKeyRX.MatchString(strings.TrimSpace(value))
+	var normalized strings.Builder
+	var previous rune
+	for _, ch := range strings.TrimSpace(value) {
+		if unicode.IsUpper(ch) && (unicode.IsLower(previous) || unicode.IsDigit(previous)) {
+			normalized.WriteByte('_')
+		}
+		normalized.WriteRune(ch)
+		previous = ch
+	}
+	return sensitiveKeyRX.MatchString(normalized.String())
 }
 
 func Snippet(value string, max int) string {

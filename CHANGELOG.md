@@ -2,6 +2,21 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## Unreleased
+
+### Security
+
+- Preserve boolean and numeric values, including large integers, in baseline contract hashes so safety annotation and schema constraint changes are detected.
+- Redact quoted JSON/YAML keys, escaped or unterminated quoted values, camelCase secret keys, and quoted command-line secrets with shared detector/redaction boundaries.
+- Keep embedded metadata JSON and invisible characters visible to detectors instead of escaping them out of analysis.
+- Preserve number representations during inspection conversion and reject live integer ranges the SDK cannot preserve exactly.
+- Normalize dot segments and decoded hierarchical URI paths before policy namespace matching; reject opaque/hierarchical URI confusion.
+- Scan server initialization instructions with the same bounded poisoning checks used for other MCP metadata.
+- Omit untrusted remote/transport error text from inspection diagnostics, reject malformed URL queries, and reject line breaks in bearer header values.
+- Require Go 1.26.8 and run CI vulnerability checks on the build toolchain, closing reachable standard-library advisories affecting the previous Go 1.25.12 baseline.
+
+Existing baselines remain readable, but corrected canonicalization can report drift against baselines created before these fixes. Review the source again before explicitly updating a baseline. Finding fingerprints may also change where redaction or metadata normalization changed; review affected suppressions rather than updating them automatically.
+
 ## 0.3.0 - 2026-07-16
 
 ### Added

@@ -38,7 +38,7 @@ cd .\argusgate_v0.3.0_windows_amd64\argusgate_v0.3.0_windows_amd64
 .\argusgate.exe --version
 ```
 
-Build from source with Go 1.25.12 or newer:
+Build from source with Go 1.26.8 or newer:
 
 ```bash
 mkdir -p bin
@@ -103,6 +103,8 @@ Refresh a baseline only after reviewing the new metadata:
 
 Baselines store normalized SHA-256 identities and contract hashes. Environment and header values are not stored.
 
+After a canonicalization or redaction fix, older baselines and suppression fingerprints can produce new findings. Review the metadata before explicitly updating the baseline or policy; updates are never automatic.
+
 ## Opt-In Live Inspection
 
 Live inspection is explicit and metadata-only:
@@ -125,6 +127,8 @@ export MCP_INSPECTION_TOKEN="replace-with-runtime-secret"
 ```
 
 Inspection accepts HTTPS Streamable HTTP endpoints only. Redirects, standalone SSE, retries, credentials in URLs, secret-like query parameters, cross-origin requests, `tools/call`, `prompts/get`, and `resources/read` are blocked. Values of any permitted query parameters are redacted before the endpoint is stored in reports or baselines.
+
+Server initialization instructions are scanned alongside other metadata. Inspection errors identify the failed operation but omit untrusted remote diagnostics because they can echo credentials. Check authentication, endpoint configuration, and TLS when a generic request failure is reported; do not publish credential-bearing server logs.
 
 ## CLI
 
@@ -242,6 +246,7 @@ SARIF output uses SARIF 2.1.0 and omits suppressed findings.
 - Baselines detect metadata/config drift but do not prove artifact provenance.
 - No runtime proxy, database, web UI, RBAC, Kubernetes deployment, or SaaS service is included.
 - Inputs and reports are bounded to reduce resource-exhaustion risk.
+- Dynamic live numeric metadata at or above `2^53` in absolute value is rejected because of SDK precision limits; use offline fixtures for exact large integers.
 - Live inspection has a 15-second default timeout, 16 MiB per-response limit, 64 MiB session-response budget, 100-page limit, and 10,000-artifact limit.
 
 ## Roadmap

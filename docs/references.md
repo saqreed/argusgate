@@ -37,3 +37,11 @@ Design influence: typed composite-action inputs/outputs, `$GITHUB_OUTPUT`, SARIF
 - govulncheck: https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck
 
 Design influence: module verification, reachable-vulnerability checks, race-enabled tests, and release review.
+
+- Go download index: https://go.dev/dl/?mode=json
+- URL path-resolution advisory: https://pkg.go.dev/vuln/GO-2026-6218
+- TLS handshake resource advisory: https://pkg.go.dev/vuln/GO-2026-6090
+- ASN.1 recursion advisory: https://pkg.go.dev/vuln/GO-2026-5972
+- IDNA advisory: https://pkg.go.dev/vuln/GO-2026-5026
+
+Design influence: minimum Go 1.26.8 toolchain for supported patch releases and vulnerability checks bound to the same toolchain used to build release binaries, rather than an automatically substituted version.

@@ -37,8 +37,14 @@ var (
 	base64LikeRX      = regexp.MustCompile(`[A-Za-z0-9+/_-]{40,}={0,2}`)
 )
 
-func (d ToolPoisoningDetector) ScanServer(mcp.ServerConfig) []report.Finding {
-	return nil
+func (d ToolPoisoningDetector) ScanServer(server mcp.ServerConfig) []report.Finding {
+	findings := scanPoisoningBlobs(mcp.ServerTextBlobs(server))
+	for i := range findings {
+		findings[i].ServerID = server.ID
+		findings[i].SubjectType = "server"
+		findings[i].SubjectName = server.ID
+	}
+	return findings
 }
 
 func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Finding {
@@ -46,8 +52,16 @@ func (d ToolPoisoningDetector) ScanTool(tool mcp.ToolDefinition) []report.Findin
 }
 
 func (d ToolPoisoningDetector) ScanArtifact(artifact mcp.Artifact) []report.Finding {
+	findings := scanPoisoningBlobs(mcp.ArtifactTextBlobs(artifact))
+	for i := range findings {
+		findings[i] = withArtifactIdentity(findings[i], artifact)
+	}
+	return findings
+}
+
+func scanPoisoningBlobs(blobs []mcp.TextBlob) []report.Finding {
 	var findings []report.Finding
-	for _, blob := range mcp.ArtifactTextBlobs(artifact) {
+	for _, blob := range blobs {
 		lower := strings.ToLower(blob.Text)
 		for _, phrase := range poisoningPhrases {
 			if strings.Contains(lower, phrase) {
@@ -124,9 +138,6 @@ func (d ToolPoisoningDetector) ScanArtifact(artifact mcp.Artifact) []report.Find
 				Confidence:      "medium",
 			})
 		}
-	}
-	for i := range findings {
-		findings[i] = withArtifactIdentity(findings[i], artifact)
 	}
 	return findings
 }

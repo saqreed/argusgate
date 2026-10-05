@@ -3,6 +3,7 @@ package policy
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -400,6 +401,10 @@ func extractPolicyPathCandidates(text string) []string {
 
 func trimPathPunctuation(candidate string) string {
 	if strings.ContainsAny(candidate, "/\\") {
+		normalized := strings.ReplaceAll(candidate, "\\", "/")
+		if strings.HasSuffix(normalized, "/.") || strings.HasSuffix(normalized, "/..") {
+			return candidate
+		}
 		return strings.TrimRight(candidate, ".:")
 	}
 	return candidate
@@ -485,11 +490,21 @@ func uriHasPrefix(candidate, prefix string) bool {
 			return false
 		}
 		if prefixURL.Opaque != "" || candidateURL.Opaque != "" {
+			if prefixURL.Opaque == "" || candidateURL.Opaque == "" {
+				return false
+			}
 			return hasURINamespacePrefix(strings.ToLower(candidateURL.Opaque), strings.ToLower(prefixURL.Opaque))
 		}
-		return hasURINamespacePrefix(candidateURL.EscapedPath(), prefixURL.EscapedPath())
+		return hasURINamespacePrefix(cleanURIPath(candidateURL.Path), cleanURIPath(prefixURL.Path))
 	}
 	return hasURINamespacePrefix(strings.ToLower(candidate), strings.ToLower(prefix))
+}
+
+func cleanURIPath(value string) string {
+	if value == "" {
+		return "/"
+	}
+	return path.Clean(value)
 }
 
 func hasURINamespacePrefix(candidate, prefix string) bool {
@@ -532,7 +547,21 @@ func matchesAnyPrefix(candidate string, prefixes []string) bool {
 }
 
 func normalizePathText(value string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), "\\", "/"))
+	value = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), "\\", "/"))
+	if value == "" {
+		return ""
+	}
+	clean := path.Clean(value)
+	if strings.HasPrefix(value, "./") && clean != ".." && !strings.HasPrefix(clean, "../") {
+		if clean == "." {
+			return "./"
+		}
+		return "./" + clean
+	}
+	if strings.HasPrefix(value, "//") {
+		return "/" + clean
+	}
+	return clean
 }
 
 func isPathLikePrefix(value string) bool {

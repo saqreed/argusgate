@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+
+	"github.com/saqreed/argusgate/argusgate/internal/redact"
 )
 
 type Document struct {
@@ -279,14 +281,14 @@ func flattenStringsDepth(location string, value any, out *[]TextBlob, depth int)
 		}
 	case map[string]string:
 		for _, key := range sortedStringMapKeys(typed) {
-			addBlob(out, location+"."+key, fmt.Sprintf("%s=%q", key, typed[key]))
+			addBlob(out, location+"."+key, stringFieldText(key, typed[key]))
 		}
 	case map[string]any:
 		for _, key := range sortedAnyMapKeys(typed) {
 			item := typed[key]
 			switch scalar := item.(type) {
 			case string:
-				addBlob(out, location+"."+key, fmt.Sprintf("%s=%q", key, scalar))
+				addBlob(out, location+"."+key, stringFieldText(key, scalar))
 			case bool, int, int64, uint64, float64:
 				addBlob(out, location+"."+key, fmt.Sprintf("%s=%v", key, scalar))
 			default:
@@ -306,6 +308,14 @@ func flattenStringsDepth(location string, value any, out *[]TextBlob, depth int)
 	default:
 		addBlob(out, location, fmt.Sprint(typed))
 	}
+}
+
+func stringFieldText(key, value string) string {
+	if redact.IsSensitiveKey(key) {
+		return fmt.Sprintf("%s=%q", key, value)
+	}
+	// Keep embedded JSON and control characters visible to metadata detectors.
+	return key + "=" + value
 }
 
 func ExceedsMaxNesting(value any) bool {

@@ -19,12 +19,15 @@ The root `action.yml` downloads these archives and refuses to run them unless th
    go mod verify
    go test -mod=readonly -count=1 ./...
    go vet -mod=readonly ./...
-   go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+   GOTOOLCHAIN="$(go env GOVERSION)" go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
    go run github.com/securego/gosec/v2/cmd/gosec@v2.28.0 -quiet ./...
    go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -no-color
    mkdir -p bin
    go build -mod=readonly -trimpath -o ./bin/argusgate ./cmd/argusgate
+   GOTOOLCHAIN="$(go env GOVERSION)" go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 -mode=binary ./bin/argusgate
    ```
+
+   Keep vulnerability checks on the same Go toolchain as the build. Otherwise `go run` can automatically select a newer toolchain for the checker and miss vulnerabilities in the version used to compile ArgusGate. In PowerShell, set `$env:GOTOOLCHAIN = (go env GOVERSION)` before running the checks and restore the previous value afterward. CI and release workflows use `GOTOOLCHAIN: local` after installing the version declared in `go.mod`.
 
 5. Verify:
 

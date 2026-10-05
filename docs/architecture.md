@@ -50,6 +50,10 @@ Allowed JSON-RPC methods:
 
 The transport blocks tool calls, prompt retrieval, resource reads, redirects, retries, standalone SSE, cross-origin requests, non-HTTPS endpoints, credentials in URLs, and unexpected HTTP methods. Requests and responses have hard size limits, list pagination is bounded, and credentials are read from environment variables only.
 
+Inspection diagnostics identify the failed operation but omit untrusted remote and transport error text, which can echo credentials in arbitrary encodings. Timeout, cancellation, and TLS certificate failures retain safe explanations. Malformed query encodings and line breaks in credential headers are rejected before connection.
+
+The SDK decodes generic JSON numbers through floating-point values. Inspection rejects dynamic numeric metadata with absolute values at or above `2^53`, rather than accepting already-rounded integers into a baseline. Use an offline fixture for exact large-integer contracts. This is not a byte-for-byte wire representation or an arbitrary-precision JSON comparator.
+
 ## Baseline Model
 
 A baseline contains:
@@ -59,6 +63,8 @@ A baseline contains:
 - protocol and ArgusGate format versions.
 
 Environment/header values are omitted; only key names affect server contracts. Secret-like values elsewhere are redacted before hashing. Added and changed contracts are high severity; removal is informational.
+
+Boolean and numeric contract values are preserved, including integer precision. When upgrading from older canonicalization behavior, existing baselines may report drift even if source metadata is unchanged. Re-review the source and use the explicit baseline update command; never silently migrate reviewed hashes or suppressions.
 
 ## Determinism And Failure
 

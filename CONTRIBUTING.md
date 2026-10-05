@@ -6,7 +6,7 @@ ArgusGate is an early open-source MCP security scanner. Contributions should kee
 
 Requirements:
 
-- Go 1.25.12 or newer.
+- Go 1.26.8 or newer.
 
 Run:
 

@@ -3,10 +3,12 @@ package inspection
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,7 +17,6 @@ import (
 	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/saqreed/argusgate/argusgate/internal/redact"
 	"github.com/saqreed/argusgate/argusgate/mcp"
 )
 
@@ -94,7 +95,7 @@ func inspectWithTransport(ctx context.Context, options Options, base http.RoundT
 		return mcp.Document{}, fmt.Errorf(
 			"connect to MCP endpoint %s: %s",
 			metadataEndpoint,
-			redact.Text(strings.ReplaceAll(err.Error(), endpoint.String(), metadataEndpoint)),
+			inspectionErrorSummary(err),
 		)
 	}
 	defer session.Close()
@@ -140,7 +141,7 @@ func inspectWithTransport(ctx context.Context, options Options, base http.RoundT
 		}
 	}
 
-	return mcp.Document{
+	document := mcp.Document{
 		SourcePath:        metadataEndpoint,
 		ProtocolVersion:   initialize.ProtocolVersion,
 		Servers:           []mcp.ServerConfig{server},
@@ -148,7 +149,57 @@ func inspectWithTransport(ctx context.Context, options Options, base http.RoundT
 		Prompts:           server.Prompts,
 		Resources:         server.Resources,
 		ResourceTemplates: server.ResourceTemplates,
-	}, nil
+	}
+	if err := validateLiveNumbers(document); err != nil {
+		return mcp.Document{}, err
+	}
+	return document, nil
+}
+
+func validateLiveNumbers(document mcp.Document) error {
+	for _, server := range document.Servers {
+		if err := validateLiveNumberValue(server.Capabilities, 0); err != nil {
+			return err
+		}
+	}
+	for _, artifact := range mcp.DocumentArtifacts(document) {
+		for _, value := range []any{artifact.InputSchema, artifact.OutputSchema, artifact.Execution, artifact.Annotations, artifact.Meta, artifact.Raw} {
+			if err := validateLiveNumberValue(value, 0); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateLiveNumberValue(value any, depth int) error {
+	if depth > mcp.MaxNestingDepth {
+		return errors.New("live metadata nesting exceeds the inspection limit")
+	}
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, child := range typed {
+			if err := validateLiveNumberValue(child, depth+1); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if err := validateLiveNumberValue(child, depth+1); err != nil {
+				return err
+			}
+		}
+	case json.Number:
+		number, err := typed.Float64()
+		if err != nil || math.Abs(number) >= 1<<53 {
+			return errors.New("live numeric metadata exceeds the SDK precision limit; use a local fixture for exact large integers")
+		}
+	case float64:
+		if math.Abs(typed) >= 1<<53 {
+			return errors.New("live numeric metadata exceeds the SDK precision limit; use a local fixture for exact large integers")
+		}
+	}
+	return nil
 }
 
 func endpointForMetadata(endpoint *url.URL) string {
@@ -310,13 +361,30 @@ func wrapListError(method string, err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("%s failed: %w", method, err)
+	return fmt.Errorf("%s failed: %s", method, inspectionErrorSummary(err))
+}
+
+func inspectionErrorSummary(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "inspection timed out"
+	}
+	if errors.Is(err, context.Canceled) {
+		return "inspection canceled"
+	}
+	var unknownAuthority x509.UnknownAuthorityError
+	var invalidCertificate x509.CertificateInvalidError
+	var hostname x509.HostnameError
+	if errors.As(err, &unknownAuthority) || errors.As(err, &invalidCertificate) || errors.As(err, &hostname) {
+		return "TLS certificate validation failed; check the endpoint certificate and trust store"
+	}
+	// Remote and transport errors may echo credentials, including encoded values.
+	return "MCP request failed; check endpoint, TLS, authentication and protocol support (remote diagnostic omitted)"
 }
 
 func validateEndpoint(raw string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return nil, fmt.Errorf("invalid MCP endpoint: %w", err)
+		return nil, errors.New("invalid MCP endpoint URL")
 	}
 	if parsed.Scheme != "https" {
 		return nil, errors.New("MCP inspection requires an https:// endpoint")
@@ -330,7 +398,11 @@ func validateEndpoint(raw string) (*url.URL, error) {
 	if parsed.Fragment != "" {
 		return nil, errors.New("MCP endpoint must not contain a URL fragment")
 	}
-	for key := range parsed.Query() {
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return nil, errors.New("invalid MCP endpoint query encoding")
+	}
+	for key := range query {
 		lower := strings.ToLower(key)
 		if strings.Contains(lower, "token") || strings.Contains(lower, "key") ||
 			strings.Contains(lower, "secret") || strings.Contains(lower, "password") ||
@@ -347,6 +419,9 @@ func resolveHeaders(tokenEnv string, headerEnv []string) (http.Header, error) {
 		value, ok := os.LookupEnv(tokenEnv)
 		if !ok || strings.TrimSpace(value) == "" {
 			return nil, fmt.Errorf("token environment variable %s is not set", tokenEnv)
+		}
+		if strings.ContainsAny(value, "\r\n") {
+			return nil, fmt.Errorf("token environment variable %s contains a line break", tokenEnv)
 		}
 		headers.Set("Authorization", "Bearer "+value)
 	}
@@ -395,7 +470,9 @@ func toMap(value any) map[string]any {
 		return nil
 	}
 	var out map[string]any
-	if json.Unmarshal(raw, &out) != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if decoder.Decode(&out) != nil {
 		return nil
 	}
 	return out

@@ -60,6 +60,12 @@ For absolute URIs, ArgusGate compares:
 - authority/host case-insensitively;
 - path on namespace boundaries.
 
+Hierarchical URI paths are URL-decoded once and dot segments (`.` and `..`) are resolved before allow/deny matching. URI path case is preserved. Filesystem path rules normalize separators, case, and dot segments without accessing the filesystem. Traversal such as `./examples/../private` does not remain inside an `./examples` allow rule.
+
+Opaque URI namespaces and hierarchical URI namespaces are distinct: `file:private` cannot match a `file:///workspace` allow rule.
+
+These are static namespace checks, not a filesystem sandbox or a complete URL security policy. Symlinks, runtime arguments, repeated decoding by remote applications, and server-specific URI semantics require separate runtime controls.
+
 For example, `https://trusted.example/api` matches `https://trusted.example/api/items`, but does not match `https://trusted.example.evil/api` or `https://trusted.example/api-private`.
 
 ## Suppressions

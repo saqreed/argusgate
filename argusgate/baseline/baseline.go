@@ -169,6 +169,8 @@ func normalizeCanonicalDepth(parent string, value any, depth int) any {
 		return nil
 	case string:
 		return redact.Text(strings.ReplaceAll(typed, "\r\n", "\n"))
+	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, json.Number:
+		return typed
 	case map[string]string:
 		out := make(map[string]any, len(typed))
 		for key, item := range typed {
@@ -217,7 +219,9 @@ func normalizeCanonicalDepth(parent string, value any, depth int) any {
 			return redact.Text(fmt.Sprint(typed))
 		}
 		var generic any
-		if json.Unmarshal(raw, &generic) == nil {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		if decoder.Decode(&generic) == nil {
 			return normalizeCanonicalDepth(parent, generic, depth+1)
 		}
 		return redact.Text(fmt.Sprint(typed))
