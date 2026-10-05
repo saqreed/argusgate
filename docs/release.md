@@ -1,6 +1,6 @@
 # Release Process
 
-ArgusGate publishes prerelease builds from version tags such as `v0.3.0`.
+ArgusGate publishes regular releases from plain version tags such as `v0.3.1`. Tags with a prerelease suffix, such as `v0.3.2-rc.1`, publish prereleases. A regular release does not change the project's experimental security disclaimer.
 
 ## Assets
 
@@ -42,12 +42,12 @@ The root `action.yml` downloads these archives and refuses to run them unless th
 6. Commit, merge, and create an annotated tag:
 
    ```bash
-   git tag -a v0.3.0 -m "ArgusGate v0.3.0"
+   git tag -a v0.3.1 -m "ArgusGate v0.3.1"
    git push origin main
-   git push origin v0.3.0
+   git push origin v0.3.1
    ```
 
-The malicious v0.3 fixture command should exit `1`. Pushing the tag runs tests, checks version/changelog consistency, cross-compiles all archives, generates checksums, and publishes a GitHub prerelease.
+The malicious v0.3 fixture command should exit `1`. Pushing the tag runs tests, checks version/changelog consistency, cross-compiles all archives, generates checksums, and publishes a GitHub release. Plain version tags are marked Latest; prerelease tags are not. Existing published tags must not be moved to different commits.
 
 ## User Checksum Verification
 
@@ -60,5 +60,5 @@ sha256sum -c SHA256SUMS.txt --ignore-missing
 Windows PowerShell:
 
 ```powershell
-Get-FileHash .\argusgate_v0.3.0_windows_amd64.zip -Algorithm SHA256
+Get-FileHash .\argusgate_v0.3.1_windows_amd64.zip -Algorithm SHA256
 ```

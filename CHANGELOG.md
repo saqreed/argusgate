@@ -2,7 +2,7 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
-## Unreleased
+## 0.3.1 - 2026-10-06
 
 ### Security
 
@@ -16,6 +16,11 @@ All notable changes to ArgusGate will be documented in this file.
 - Require Go 1.26.8 and run CI vulnerability checks on the build toolchain, closing reachable standard-library advisories affecting the previous Go 1.25.12 baseline.
 
 Existing baselines remain readable, but corrected canonicalization can report drift against baselines created before these fixes. Review the source again before explicitly updating a baseline. Finding fingerprints may also change where redaction or metadata normalization changed; review affected suppressions rather than updating them automatically.
+
+### Changed
+
+- Publish plain version tags as regular GitHub releases marked Latest; tags with prerelease suffixes remain prereleases.
+- Update installation and GitHub Action examples to v0.3.1. The project remains experimental despite the regular release designation.
 
 ## 0.3.0 - 2026-07-16
 

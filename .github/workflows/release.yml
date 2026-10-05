@@ -181,15 +181,19 @@ jobs:
             printf 'See CHANGELOG.md for release notes.\n' > RELEASE_NOTES.md
           fi
 
-      - name: Publish GitHub prerelease
+      - name: Publish GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          release_flags=(--prerelease=false --latest)
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            release_flags=(--prerelease --latest=false)
+          fi
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --title "ArgusGate $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --prerelease
             gh release upload "$GITHUB_REF_NAME" release/* --clobber
+            gh release edit "$GITHUB_REF_NAME" --title "ArgusGate $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --draft=false "${release_flags[@]}"
           else
-            gh release create "$GITHUB_REF_NAME" release/* --title "ArgusGate $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --prerelease
+            gh release create "$GITHUB_REF_NAME" release/* --title "ArgusGate $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --verify-tag "${release_flags[@]}"
           fi

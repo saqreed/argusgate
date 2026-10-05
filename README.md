@@ -6,7 +6,9 @@ It helps teams inspect MCP configs and advertised metadata, detect risky capabil
 
 ArgusGate is experimental. Its detections are heuristic, and it is not a complete security boundary. Use it alongside sandboxing, least-privilege credentials, network controls, code review, and runtime monitoring.
 
-## What v0.3.0 Adds
+v0.3.1 is a security patch release with fixes for secret redaction, policy namespace traversal, baseline drift detection, and server instruction scanning. See [CHANGELOG.md](CHANGELOG.md) for details and baseline compatibility notes.
+
+## v0.3 Features
 
 - Tools, prompts, resources, and resource-template scanning.
 - Reviewed metadata baselines for drift and rug-pull detection.
@@ -25,16 +27,16 @@ Download the archive for your operating system and CPU from [GitHub Releases](ht
 Linux or macOS:
 
 ```bash
-tar -xzf argusgate_v0.3.0_linux_amd64.tar.gz
-cd argusgate_v0.3.0_linux_amd64
+tar -xzf argusgate_v0.3.1_linux_amd64.tar.gz
+cd argusgate_v0.3.1_linux_amd64
 ./argusgate --version
 ```
 
 Windows PowerShell:
 
 ```powershell
-Expand-Archive .\argusgate_v0.3.0_windows_amd64.zip
-cd .\argusgate_v0.3.0_windows_amd64\argusgate_v0.3.0_windows_amd64
+Expand-Archive .\argusgate_v0.3.1_windows_amd64.zip
+cd .\argusgate_v0.3.1_windows_amd64\argusgate_v0.3.1_windows_amd64
 .\argusgate.exe --version
 ```
 
@@ -210,7 +212,7 @@ jobs:
 
       - name: Scan MCP metadata
         id: argusgate
-        uses: saqreed/argusgate@v0.3.0
+        uses: saqreed/argusgate@v0.3.1
         with:
           source-type: fixtures
           source: examples/fixtures/v03-metadata.yaml

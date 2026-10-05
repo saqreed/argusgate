@@ -12,7 +12,7 @@ import (
 	"github.com/saqreed/argusgate/argusgate/scanner/severity"
 )
 
-const Version = "0.3.0"
+const Version = "0.3.1"
 const MaxFindings = 10000
 
 type Options struct {

@@ -45,3 +45,10 @@ Design influence: module verification, reachable-vulnerability checks, race-enab
 - IDNA advisory: https://pkg.go.dev/vuln/GO-2026-5026
 
 Design influence: minimum Go 1.26.8 toolchain for supported patch releases and vulnerability checks bound to the same toolchain used to build release binaries, rather than an automatically substituted version.
+
+## GitHub Release Publication
+
+- GitHub CLI release creation: https://cli.github.com/manual/gh_release_create
+- GitHub CLI release editing: https://cli.github.com/manual/gh_release_edit
+
+Design influence: regular version tags clear the prerelease flag and become Latest, prerelease suffixes retain prerelease status, and publication requires an existing remote tag.

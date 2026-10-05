@@ -1,6 +1,6 @@
 # Architecture
 
-ArgusGate v0.3.0 is a CLI-first Go application. Local scans are offline; network access exists only behind the explicit `inspect` command or `--url` baseline source.
+ArgusGate v0.3.1 is a CLI-first Go application. Local scans are offline; network access exists only behind the explicit `inspect` command or `--url` baseline source.
 
 ## Packages
 
@@ -72,4 +72,4 @@ Map traversal, artifact ordering, finding ordering, fingerprints, rule listing, 
 
 ## Deferred Runtime Gateway
 
-The package boundaries allow future reuse by a runtime gateway, but v0.3.0 does not proxy MCP traffic or enforce tool invocations.
+The package boundaries allow future reuse by a runtime gateway, but v0.3.1 does not proxy MCP traffic or enforce tool invocations.
