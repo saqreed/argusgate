@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/saqreed/argusgate/discussions
+    about: Ask questions, discuss use cases, or share feedback.
+  - name: Security reporting guidance
+    url: https://github.com/saqreed/argusgate/blob/main/SECURITY.md
+    about: Read the security policy before reporting a suspected vulnerability. Do not post exploit details publicly.

@@ -27,3 +27,5 @@ assignees: ""
 ## Notes
 
 Do not include real secrets. Use fake placeholders such as `FAKE_TOKEN_DO_NOT_USE`.
+
+For a suspected vulnerability in ArgusGate itself, follow [SECURITY.md](https://github.com/saqreed/argusgate/blob/main/SECURITY.md) instead of posting exploit details here. Remove private endpoints, infrastructure identifiers, and credential-bearing output from reproductions.

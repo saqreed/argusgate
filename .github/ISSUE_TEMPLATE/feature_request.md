@@ -21,3 +21,5 @@ assignees: ""
 ## Security Considerations
 
 Do not include real secrets or private internal system details.
+
+Explain how the change fits the documented scanner/policy scope. Local scans must stay offline; inspection must remain opt-in, HTTPS-only, bounded, and metadata-only.
