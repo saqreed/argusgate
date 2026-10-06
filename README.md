@@ -1,30 +1,65 @@
 # ArgusGate
 
-ArgusGate is an open-source security scanner and policy gateway foundation for Model Context Protocol servers.
+[![CI](https://github.com/saqreed/argusgate/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/saqreed/argusgate/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/saqreed/argusgate?include_prereleases)](https://github.com/saqreed/argusgate/releases)
+[![License](https://img.shields.io/github/license/saqreed/argusgate)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/saqreed/argusgate)](go.mod)
 
-It helps teams inspect MCP configs and advertised metadata, detect risky capabilities and suspicious instructions, compare servers against reviewed baselines, enforce policy in CI, and produce JSON or SARIF reports.
+Open-source security scanner and policy gate for Model Context Protocol (MCP) servers.
 
-ArgusGate is experimental. Its detections are heuristic, and it is not a complete security boundary. Use it alongside sandboxing, least-privilege credentials, network controls, code review, and runtime monitoring.
+ArgusGate helps developers, DevOps/SecOps teams, and security reviewers inspect MCP server configurations and advertised contracts before trusting them in MCP clients. It scans tool, prompt, resource, and resource-template metadata, flags suspicious instructions and risky capabilities, and evaluates review policy in CI.
+
+**Experimental:** detections are heuristic. ArgusGate is not a sandbox or a complete security boundary. Use it alongside sandboxing, least-privilege credentials, network controls, code review, and runtime monitoring.
+
+Local config and fixture scans stay offline and never start MCP server commands. Explicit HTTPS inspection lists metadata only: it does not invoke tools, retrieve prompts or resources, or start stdio servers.
+
+## Try It In A Minute
+
+From a repository checkout with Go 1.26.8 or newer, scan an intentionally risky local fixture:
+
+```bash
+go run ./cmd/argusgate fixtures scan --path examples/fixtures/malicious-tools.yaml
+```
+
+Excerpt from the current output:
+
+```text
+Findings: 21
+Severity: critical=0 high=18 medium=3 low=0 info=0
+Exit: fail (code=1, 18 unsuppressed finding(s) at or above high)
+- [high] SQL write or administrative operation detected (AG-SQL001 server=malicious tool=db_query)
+- [high] Suspicious base64-like payload in MCP metadata (AG-TP003 server=malicious tool=encoded_instruction)
+```
+
+Exit `1` is expected here: the fixture contains risky metadata and fake secret placeholders. The scan does not execute the advertised capabilities or contact a server. First-time source builds may download Go dependencies.
+
+## Why ArgusGate?
+
+- Review advertised MCP capabilities before trusting a server.
+- Detect suspicious instructions and secret-like values across tools, prompts, resources, and templates.
+- Identify shell, filesystem, database, browser, and infrastructure capability signals.
+- Apply versioned policy-as-code with CI-friendly exit decisions.
+- Compare metadata and configuration against explicitly reviewed baselines.
+- Export findings as JSON or SARIF for review and GitHub Code Scanning.
+- Inspect a selected HTTPS endpoint's metadata without invoking its tools.
+
+## Use Cases
+
+- Review a new MCP server before connecting it to an MCP client.
+- Audit local configurations and exported tool, prompt, and resource catalogs.
+- Check for suspicious descriptions, exposed credentials, or dangerous advertised capabilities.
+- Detect metadata/configuration drift after a server or dependency update.
+- Gate MCP metadata changes in CI with policy and a reviewed baseline.
+- Send findings to GitHub Code Scanning through SARIF.
+- Perform an explicit, constrained metadata-only review of a remote HTTPS MCP endpoint.
 
 v0.3.1 is a security patch release with fixes for secret redaction, policy namespace traversal, baseline drift detection, and server instruction scanning. See [CHANGELOG.md](CHANGELOG.md) for details and baseline compatibility notes.
 
-## v0.3 Features
-
-- Tools, prompts, resources, and resource-template scanning.
-- Reviewed metadata baselines for drift and rug-pull detection.
-- Opt-in HTTPS Streamable HTTP metadata inspection.
-- Policy `0.3` controls for prompts and resource URI namespaces.
-- MCP contract checks for missing tool schemas and contradictory annotations.
-- A searchable stable rule catalog.
-- A checksum-verified composite GitHub Action.
-
-Local config and fixture scans remain fully offline. ArgusGate never starts commands from MCP configs.
-
 ## Install
 
-Download the archive for your operating system and CPU from [GitHub Releases](https://github.com/saqreed/argusgate/releases), then verify it against `SHA256SUMS.txt`.
+Download the archive for your operating system and CPU from [GitHub Releases](https://github.com/saqreed/argusgate/releases), then verify it against `SHA256SUMS.txt` before running it. See [checksum verification](docs/release.md#user-checksum-verification).
 
-Linux or macOS:
+Linux `amd64` example (macOS archives use `darwin`):
 
 ```bash
 tar -xzf argusgate_v0.3.1_linux_amd64.tar.gz
@@ -43,9 +78,13 @@ cd .\argusgate_v0.3.1_windows_amd64\argusgate_v0.3.1_windows_amd64
 Build from source with Go 1.26.8 or newer:
 
 ```bash
+git clone https://github.com/saqreed/argusgate.git
+cd argusgate
 mkdir -p bin
 go build -o ./bin/argusgate ./cmd/argusgate
 ```
+
+On Windows, build with `go build -o .\bin\argusgate.exe ./cmd/argusgate` and use `.\bin\argusgate.exe` in place of `./bin/argusgate` below.
 
 ## Quick Start
 
@@ -133,6 +172,8 @@ Inspection accepts HTTPS Streamable HTTP endpoints only. Redirects, standalone S
 Server initialization instructions are scanned alongside other metadata. Inspection errors identify the failed operation but omit untrusted remote diagnostics because they can echo credentials. Check authentication, endpoint configuration, and TLS when a generic request failure is reported; do not publish credential-bearing server logs.
 
 ## CLI
+
+MCP contract checks flag missing tool schemas and contradictory safety annotations. Use `rules list` and `rules show` to browse stable rule IDs and their documented heuristics.
 
 ```text
 argusgate --help
@@ -261,7 +302,9 @@ SARIF output uses SARIF 2.1.0 and omits suppressed findings.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Never include real credentials in issues, fixtures, tests, reports, or documentation.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), [good first issues](https://github.com/saqreed/argusgate/labels/good%20first%20issue), or [help wanted](https://github.com/saqreed/argusgate/labels/help%20wanted). Use [Discussions](https://github.com/saqreed/argusgate/discussions) for questions and ideas.
+
+For suspected vulnerabilities in ArgusGate itself, follow [SECURITY.md](SECURITY.md) rather than posting exploit details publicly. Never include real credentials in issues, fixtures, tests, reports, or documentation.
 
 ## License
 
