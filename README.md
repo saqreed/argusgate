@@ -53,16 +53,16 @@ Exit `1` is expected here: the fixture contains risky metadata and fake secret p
 - Send findings to GitHub Code Scanning through SARIF.
 - Perform an explicit, constrained metadata-only review of a remote HTTPS MCP endpoint.
 
-v0.3.1 is a security patch release with fixes for secret redaction, policy namespace traversal, baseline drift detection, and server instruction scanning. See [CHANGELOG.md](CHANGELOG.md) for details and baseline compatibility notes.
+v0.3.5 improves baseline drift reports, fixes read-only annotation false positives, and updates the Go toolchain. See [CHANGELOG.md](CHANGELOG.md) for details and baseline compatibility notes.
 
 ## Install
 
-Download the archive for your operating system and CPU and `SHA256SUMS.txt` from the same [GitHub release](https://github.com/saqreed/argusgate/releases). Use `amd64` for Intel or AMD x86-64 and `arm64` for ARM64, including Apple Silicon. macOS archives use `darwin` in the filename. The commands below use v0.3.1 assets.
+Download the archive for your operating system and CPU and `SHA256SUMS.txt` from the same [GitHub release](https://github.com/saqreed/argusgate/releases). Use `amd64` for Intel or AMD x86-64 and `arm64` for ARM64, including Apple Silicon. macOS archives use `darwin` in the filename. The commands below use v0.3.5 assets.
 
 Linux `amd64`:
 
 ```bash
-archive=argusgate_v0.3.1_linux_amd64.tar.gz
+archive=argusgate_v0.3.5_linux_amd64.tar.gz
 if awk -v file="$archive" '$2 == file' SHA256SUMS.txt | sha256sum -c -; then
   tar -xzf "$archive" && "./${archive%.tar.gz}/argusgate" --version
 fi
@@ -71,7 +71,7 @@ fi
 macOS on Apple Silicon (use `darwin_amd64` for Intel):
 
 ```bash
-archive=argusgate_v0.3.1_darwin_arm64.tar.gz
+archive=argusgate_v0.3.5_darwin_arm64.tar.gz
 if awk -v file="$archive" '$2 == file' SHA256SUMS.txt | shasum -a 256 -c -; then
   tar -xzf "$archive" && "./${archive%.tar.gz}/argusgate" --version
 fi
@@ -82,7 +82,7 @@ For Linux on ARM64, use `linux_arm64` in the Linux example. A failed or missing 
 Windows `amd64` in PowerShell (use `windows_arm64` for ARM64):
 
 ```powershell
-$archive = 'argusgate_v0.3.1_windows_amd64.zip'
+$archive = 'argusgate_v0.3.5_windows_amd64.zip'
 $entry = @(Get-Content -LiteralPath SHA256SUMS.txt | Where-Object { ($_ -split '\s+', 2)[1] -ceq $archive })
 if ($entry.Count -ne 1 -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne ($entry[0] -split '\s+', 2)[0]) {
     throw 'Missing or mismatched SHA-256 checksum'
@@ -272,7 +272,7 @@ jobs:
 
       - name: Scan MCP metadata
         id: argusgate
-        uses: saqreed/argusgate@v0.3.1
+        uses: saqreed/argusgate@v0.3.5
         with:
           source-type: fixtures
           source: examples/fixtures/v03-metadata.yaml
