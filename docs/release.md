@@ -39,26 +39,17 @@ The root `action.yml` downloads these archives and refuses to run them unless th
    ./bin/argusgate fixtures scan --path examples/fixtures/v03-metadata.yaml --policy examples/policies/v03-trust.yaml --report v03-report.json --sarif v03.sarif
    ```
 
-6. Commit, merge, and create an annotated tag:
+6. Set the changelog date, commit, merge, and create an annotated tag. Set `version` to the release being published:
 
    ```bash
-   git tag -a v0.3.1 -m "ArgusGate v0.3.1"
+   version=v0.3.5
+   git tag -a "$version" -m "ArgusGate $version"
    git push origin main
-   git push origin v0.3.1
+   git push origin "$version"
    ```
 
 The malicious v0.3 fixture command should exit `1`. Pushing the tag runs tests, checks version/changelog consistency, cross-compiles all archives, generates checksums, and publishes a GitHub release. Plain version tags are marked Latest; prerelease tags are not. Existing published tags must not be moved to different commits.
 
 ## User Checksum Verification
 
-Linux or macOS:
-
-```bash
-sha256sum -c SHA256SUMS.txt --ignore-missing
-```
-
-Windows PowerShell:
-
-```powershell
-Get-FileHash .\argusgate_v0.3.1_windows_amd64.zip -Algorithm SHA256
-```
+See [installation](../README.md#install) for Linux, macOS, and Windows commands that verify a single downloaded archive against `SHA256SUMS.txt` before unpacking it. On macOS use the system `shasum` command. Compare against the manifest from the same release and stop if the filename is missing or the digest differs.

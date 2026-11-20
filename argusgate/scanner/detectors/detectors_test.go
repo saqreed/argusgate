@@ -350,6 +350,60 @@ func TestMCPMetadataDetectorValidatesToolContracts(t *testing.T) {
 	}
 }
 
+func TestReadOnlyAnnotationChecksEachCapabilityClaim(t *testing.T) {
+	for _, tc := range []struct {
+		name, description string
+		want              bool
+	}{
+		{"negated command", "Does not execute command requests. Only lists document titles within ./examples.", false},
+		{"negated shell", "Does not execute shell commands.", false},
+		{"negated write", "Cannot write files.", false},
+		{"positive command", "Can execute command requests.", true},
+		{"positive write", "Can write files.", true},
+		{"later positive claim", "Does not execute command requests, but can write files.", true},
+		{"later repeated claim", "Does not run commands by default. Can run commands when enabled.", true},
+		{"not only", "Does not only execute commands; it also lists titles.", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tool := mcp.ToolDefinition{
+				ServerID: "test", Name: "list_titles", Description: tc.description,
+				InputSchema: map[string]any{"type": "object"},
+				Annotations: map[string]any{"readOnlyHint": true},
+			}
+			findings := (MCPMetadataDetector{}).ScanArtifact(mcp.ArtifactFromTool(tool))
+			if got := hasDetectorFinding(findings, "AG-MCP002"); got != tc.want {
+				t.Fatalf("AG-MCP002 present = %v, want %v: %#v", got, tc.want, findings)
+			}
+		})
+	}
+}
+
+func TestSensitivePathDetectorWindowsPathsAcrossArtifacts(t *testing.T) {
+	for _, kind := range []mcp.ArtifactKind{mcp.ArtifactTool, mcp.ArtifactPrompt, mcp.ArtifactResource, mcp.ArtifactResourceTemplate} {
+		for _, tc := range []struct {
+			name, path string
+			want       bool
+		}{
+			{"ssh key", `C:\Users\example\.ssh\id_ed25519`, true},
+			{"cloud credentials", `C:\Users\example\.aws\credentials`, true},
+			{"workspace docs", `C:\workspace\docs`, false},
+		} {
+			t.Run(string(kind)+"/"+tc.name, func(t *testing.T) {
+				artifact := mcp.Artifact{Kind: kind, ServerID: "test", Name: "example", Description: tc.path}
+				findings := (SensitivePathDetector{}).ScanArtifact(artifact)
+				if got := hasDetectorFinding(findings, "AG-PATH001"); got != tc.want {
+					t.Fatalf("AG-PATH001 present = %v, want %v: %#v", got, tc.want, findings)
+				}
+				for _, finding := range findings {
+					if finding.ServerID != artifact.ServerID || finding.SubjectType != string(kind) || finding.SubjectName != artifact.Name || finding.Severity != severity.High {
+						t.Fatalf("incorrect path finding identity or severity: %#v", finding)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestMCPMetadataDetectorFlagsOnlyCleartextNetworkResources(t *testing.T) {
 	insecure := mcp.ArtifactFromResource(mcp.ResourceDefinition{
 		ServerID: "s1", Name: "api", URI: "http://example.test/data",

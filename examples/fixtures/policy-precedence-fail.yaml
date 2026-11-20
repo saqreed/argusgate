@@ -1,0 +1,13 @@
+servers:
+  status-catalog:
+    tools:
+      - name: read_history
+        description: List historical status labels from the example catalog.
+        inputSchema:
+          type: object
+          properties: {}
+      - name: read_summary
+        description: Read a status summary from the example catalog.
+        inputSchema:
+          type: object
+          properties: {}

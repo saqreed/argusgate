@@ -15,7 +15,7 @@ Local config and fixture scans stay offline and never start MCP server commands.
 
 ## Try It In A Minute
 
-From a repository checkout with Go 1.26.8 or newer, scan an intentionally risky local fixture:
+From a repository checkout with Go 1.26.11 or newer, scan an intentionally risky local fixture:
 
 ```bash
 go run ./cmd/argusgate fixtures scan --path examples/fixtures/malicious-tools.yaml
@@ -57,25 +57,42 @@ v0.3.1 is a security patch release with fixes for secret redaction, policy names
 
 ## Install
 
-Download the archive for your operating system and CPU from [GitHub Releases](https://github.com/saqreed/argusgate/releases), then verify it against `SHA256SUMS.txt` before running it. See [checksum verification](docs/release.md#user-checksum-verification).
+Download the archive for your operating system and CPU and `SHA256SUMS.txt` from the same [GitHub release](https://github.com/saqreed/argusgate/releases). Use `amd64` for Intel or AMD x86-64 and `arm64` for ARM64, including Apple Silicon. macOS archives use `darwin` in the filename. The commands below use v0.3.1 assets.
 
-Linux `amd64` example (macOS archives use `darwin`):
+Linux `amd64`:
 
 ```bash
-tar -xzf argusgate_v0.3.1_linux_amd64.tar.gz
-cd argusgate_v0.3.1_linux_amd64
-./argusgate --version
+archive=argusgate_v0.3.1_linux_amd64.tar.gz
+if awk -v file="$archive" '$2 == file' SHA256SUMS.txt | sha256sum -c -; then
+  tar -xzf "$archive" && "./${archive%.tar.gz}/argusgate" --version
+fi
 ```
 
-Windows PowerShell:
+macOS on Apple Silicon (use `darwin_amd64` for Intel):
+
+```bash
+archive=argusgate_v0.3.1_darwin_arm64.tar.gz
+if awk -v file="$archive" '$2 == file' SHA256SUMS.txt | shasum -a 256 -c -; then
+  tar -xzf "$archive" && "./${archive%.tar.gz}/argusgate" --version
+fi
+```
+
+For Linux on ARM64, use `linux_arm64` in the Linux example. A failed or missing checksum is a reason to stop. Checksums from the same release detect a mismatched download. Verifying build provenance requires separate evidence.
+
+Windows `amd64` in PowerShell (use `windows_arm64` for ARM64):
 
 ```powershell
-Expand-Archive .\argusgate_v0.3.1_windows_amd64.zip
-cd .\argusgate_v0.3.1_windows_amd64\argusgate_v0.3.1_windows_amd64
-.\argusgate.exe --version
+$archive = 'argusgate_v0.3.1_windows_amd64.zip'
+$entry = @(Get-Content -LiteralPath SHA256SUMS.txt | Where-Object { ($_ -split '\s+', 2)[1] -ceq $archive })
+if ($entry.Count -ne 1 -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne ($entry[0] -split '\s+', 2)[0]) {
+    throw 'Missing or mismatched SHA-256 checksum'
+}
+Expand-Archive -LiteralPath $archive
+$package = [IO.Path]::GetFileNameWithoutExtension($archive)
+& ".\$package\$package\argusgate.exe" --version
 ```
 
-Build from source with Go 1.26.8 or newer:
+Build from source with Go 1.26.11 or newer:
 
 ```bash
 git clone https://github.com/saqreed/argusgate.git
@@ -143,6 +160,8 @@ Refresh a baseline only after reviewing the new metadata:
 ```
 
 Baselines store normalized SHA-256 identities and contract hashes. Environment and header values are not stored.
+
+Starting with 0.3.5, each drift finding in the JSON report includes `previous_contract_hash` and `current_contract_hash` for the versions that exist. Compare these hashes to identify which reviewed contract changed. The baseline stores no old field values for a field-by-field diff.
 
 After a canonicalization or redaction fix, older baselines and suppression fingerprints can produce new findings. Review the metadata before explicitly updating the baseline or policy; updates are never automatic.
 

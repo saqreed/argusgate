@@ -160,6 +160,8 @@
         },
         "subject_name": { "type": "string" },
         "change_type": { "type": "string", "enum": ["added", "changed", "removed"] },
+        "previous_contract_hash": { "$ref": "#/$defs/contractHash" },
+        "current_contract_hash": { "$ref": "#/$defs/contractHash" },
         "location": { "type": "string" },
         "evidence": { "type": "string" },
         "explanation": { "type": "string" },
@@ -171,6 +173,7 @@
       },
       "additionalProperties": false
     },
+    "contractHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "severitySummary": {
       "type": "object",
       "required": ["critical", "high", "medium", "low", "info"],

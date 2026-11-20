@@ -12,7 +12,7 @@ Use [Discussions](https://github.com/saqreed/argusgate/discussions) for question
 
 Requirements:
 
-- Go 1.26.8 or newer.
+- Go 1.26.11 or newer.
 - Git and a fork or local checkout of this repository.
 
 From the repository root, run:

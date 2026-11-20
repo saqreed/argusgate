@@ -13,24 +13,26 @@ import (
 )
 
 type Finding struct {
-	ID                string         `json:"id"`
-	Title             string         `json:"title"`
-	Severity          severity.Level `json:"severity"`
-	Category          string         `json:"category"`
-	OWASPMCPMapping   string         `json:"owasp_mcp_mapping,omitempty"`
-	ServerID          string         `json:"server_id,omitempty"`
-	ToolName          string         `json:"tool_name,omitempty"`
-	SubjectType       string         `json:"subject_type,omitempty"`
-	SubjectName       string         `json:"subject_name,omitempty"`
-	ChangeType        string         `json:"change_type,omitempty"`
-	Location          string         `json:"location,omitempty"`
-	Evidence          string         `json:"evidence,omitempty"`
-	Explanation       string         `json:"explanation"`
-	Recommendation    string         `json:"recommendation,omitempty"`
-	Confidence        string         `json:"confidence"`
-	Fingerprint       string         `json:"fingerprint,omitempty"`
-	Suppressed        bool           `json:"suppressed,omitempty"`
-	SuppressionReason string         `json:"suppression_reason,omitempty"`
+	ID                   string         `json:"id"`
+	Title                string         `json:"title"`
+	Severity             severity.Level `json:"severity"`
+	Category             string         `json:"category"`
+	OWASPMCPMapping      string         `json:"owasp_mcp_mapping,omitempty"`
+	ServerID             string         `json:"server_id,omitempty"`
+	ToolName             string         `json:"tool_name,omitempty"`
+	SubjectType          string         `json:"subject_type,omitempty"`
+	SubjectName          string         `json:"subject_name,omitempty"`
+	ChangeType           string         `json:"change_type,omitempty"`
+	PreviousContractHash string         `json:"previous_contract_hash,omitempty"`
+	CurrentContractHash  string         `json:"current_contract_hash,omitempty"`
+	Location             string         `json:"location,omitempty"`
+	Evidence             string         `json:"evidence,omitempty"`
+	Explanation          string         `json:"explanation"`
+	Recommendation       string         `json:"recommendation,omitempty"`
+	Confidence           string         `json:"confidence"`
+	Fingerprint          string         `json:"fingerprint,omitempty"`
+	Suppressed           bool           `json:"suppressed,omitempty"`
+	SuppressionReason    string         `json:"suppression_reason,omitempty"`
 }
 
 type ServerSummary struct {

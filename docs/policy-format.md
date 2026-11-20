@@ -52,6 +52,22 @@ Server IDs are matched exactly. Hyphenated field aliases such as `deny-tools` ar
 
 Missing policy uses safe advisory defaults: `fail_on: high`, unknown tools/prompts/resources allowed, and no suppressions.
 
+### Example: Tool Rules For One Server
+
+The [precedence policy](../examples/policies/tool-precedence.yaml) has a global allow list and a separate allow list for `status-catalog`. It sets `fail_on: medium` so both deny and unknown-tool findings affect the exit code.
+
+```bash
+argusgate fixtures scan --path examples/fixtures/policy-precedence-pass.yaml --policy examples/policies/tool-precedence.yaml
+argusgate fixtures scan --path examples/fixtures/policy-precedence-fail.yaml --policy examples/policies/tool-precedence.yaml
+```
+
+The first scan exits `0`. `list_status` is allowed for `status-catalog` even though it is absent from the global allow list. The second exits `1` with two policy findings.
+
+- `AG-POL001` for `read_history`: the global deny applies even though the server explicitly allows the tool.
+- `AG-POL002` for `read_summary`: the server's allow list replaces the global list for unknown-tool checks on `status-catalog`.
+
+Both scans stay offline. Allow lists control policy findings only. Heuristic detector findings are still evaluated against the fail threshold.
+
 ## Resource URI Matching
 
 For absolute URIs, ArgusGate compares:

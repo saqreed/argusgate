@@ -3,6 +3,7 @@ package detectors
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/saqreed/argusgate/argusgate/internal/redact"
@@ -13,6 +14,14 @@ import (
 )
 
 type MCPMetadataDetector struct{}
+
+var annotationNegation = regexp.MustCompile(`\b(?:does not|do not|doesn't|don't|cannot|can not|can't|never|will not|won't)\s+$`)
+
+var annotationContradictions = []string{
+	"write file", "delete file", "modify file", "execute command", "run command",
+	"shell command", "insert into", "update database", "delete from", "drop table",
+	"create resource", "deploy", "kubectl apply", "docker run",
+}
 
 func (MCPMetadataDetector) ScanServer(server mcp.ServerConfig) []report.Finding {
 	if !mcp.ExceedsMaxNesting(server.Capabilities) && !mcp.ExceedsMaxNesting(server.Raw) {
@@ -194,14 +203,11 @@ func validateToolAnnotations(artifact mcp.Artifact) []report.Finding {
 	if destructiveSet && destructive {
 		reason = "readOnlyHint=true and destructiveHint=true"
 	} else {
-		lower := strings.ToLower(artifact.Name + " " + artifact.Title + " " + artifact.Description)
-		contradictions := []string{
-			"write file", "delete file", "modify file", "execute command", "run command",
-			"shell command", "insert into", "update database", "delete from", "drop table",
-			"create resource", "deploy", "kubectl apply", "docker run",
-		}
-		for _, phrase := range contradictions {
-			if strings.Contains(lower, phrase) {
+		name := strings.ToLower(artifact.Name)
+		title := strings.ToLower(artifact.Title)
+		description := strings.ToLower(artifact.Description)
+		for _, phrase := range annotationContradictions {
+			if strings.Contains(name, phrase) || hasUnnegatedAnnotationPhrase(title, phrase) || hasUnnegatedAnnotationPhrase(description, phrase) {
 				reason = "readOnlyHint=true but metadata declares " + phrase
 				break
 			}
@@ -223,6 +229,28 @@ func validateToolAnnotations(artifact mcp.Artifact) []report.Finding {
 		Confidence:      "high",
 	}, artifact))
 	return findings
+}
+
+func hasUnnegatedAnnotationPhrase(text, phrase string) bool {
+	for offset := 0; ; {
+		index := strings.Index(text[offset:], phrase)
+		if index < 0 {
+			return false
+		}
+		start := offset + index
+		// Check only the words immediately before this occurrence. Earlier
+		// negation elsewhere in the metadata cannot cancel a positive claim.
+		prefix := text[max(0, start-64):start]
+		if phrase == "shell command" {
+			for _, verb := range []string{"execute ", "run "} {
+				prefix = strings.TrimSuffix(prefix, verb)
+			}
+		}
+		if !annotationNegation.MatchString(prefix) {
+			return true
+		}
+		offset = start + len(phrase)
+	}
 }
 
 func validateResourceURI(raw string) error {

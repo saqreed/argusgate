@@ -2,13 +2,15 @@ package baseline
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/saqreed/argusgate/argusgate/internal/redact"
 	"github.com/saqreed/argusgate/argusgate/report"
 	"github.com/saqreed/argusgate/argusgate/scanner/severity"
 )
 
 func Compare(expected, current File, path string) ([]report.Finding, Summary) {
-	summary := Summary{Path: path, Version: expected.Version}
+	summary := Summary{Path: redact.Text(path), Version: expected.Version}
 	var findings []report.Finding
 
 	expectedServers := make(map[string]ServerEntry, len(expected.Servers))
@@ -27,6 +29,7 @@ func Compare(expected, current File, path string) ([]report.Finding, Summary) {
 				"server",
 				entry.ID,
 				"added",
+				"", entry.ContractHash,
 				"A server appeared after the reviewed baseline was created.",
 				"Review its endpoint, launch contract, capabilities, and metadata before updating the baseline.",
 			))
@@ -43,12 +46,16 @@ func Compare(expected, current File, path string) ([]report.Finding, Summary) {
 				"server",
 				entry.ID,
 				"changed",
+				prior.ContractHash, entry.ContractHash,
 				"The server command, transport, endpoint, capabilities, or credential key names changed since the reviewed baseline.",
 				"Review the server configuration and update the baseline only after approving the change.",
 			))
 		}
 	}
-	for _, entry := range expectedServers {
+	for _, entry := range expected.Servers {
+		if _, removed := expectedServers[entry.Identity]; !removed {
+			continue
+		}
 		summary.ServerChanged++
 		findings = append(findings, baselineFinding(
 			"AG-BASE004",
@@ -58,6 +65,7 @@ func Compare(expected, current File, path string) ([]report.Finding, Summary) {
 			"server",
 			entry.ID,
 			"removed",
+			entry.ContractHash, "",
 			"A previously reviewed server is no longer present.",
 			"Confirm that the removal is expected before refreshing the baseline.",
 		))
@@ -86,6 +94,7 @@ func Compare(expected, current File, path string) ([]report.Finding, Summary) {
 				entry.Kind,
 				entry.Name,
 				"added",
+				"", entry.ContractHash,
 				"A tool, prompt, resource, or resource template appeared after the reviewed baseline was created.",
 				"Review the new metadata and update the baseline only after approving it.",
 			))
@@ -102,12 +111,16 @@ func Compare(expected, current File, path string) ([]report.Finding, Summary) {
 				entry.Kind,
 				entry.Name,
 				"changed",
+				prior.ContractHash, entry.ContractHash,
 				"The artifact description, schema, annotations, URI, arguments, or metadata changed since review.",
 				"Review the contract change for rug pull or scope expansion and update the baseline only after approval.",
 			))
 		}
 	}
-	for _, entry := range expectedArtifacts {
+	for _, entry := range expected.Artifacts {
+		if _, removed := expectedArtifacts[entry.SubjectIdentity]; !removed {
+			continue
+		}
 		summary.Removed++
 		findings = append(findings, baselineFinding(
 			"AG-BASE003",
@@ -117,6 +130,7 @@ func Compare(expected, current File, path string) ([]report.Finding, Summary) {
 			entry.Kind,
 			entry.Name,
 			"removed",
+			entry.ContractHash, "",
 			"A previously reviewed artifact is no longer advertised.",
 			"Confirm the removal is expected and refresh the baseline during normal review.",
 		))
@@ -127,22 +141,31 @@ func Compare(expected, current File, path string) ([]report.Finding, Summary) {
 func baselineFinding(
 	id, title string,
 	level severity.Level,
-	serverID, subjectType, subjectName, changeType, explanation, recommendation string,
+	serverID, subjectType, subjectName, changeType, previousHash, currentHash, explanation, recommendation string,
 ) report.Finding {
 	return report.Finding{
-		ID:              id,
-		Title:           title,
-		Severity:        level,
-		Category:        "baseline-drift",
-		OWASPMCPMapping: "MCP03 Tool Poisoning",
-		ServerID:        serverID,
-		SubjectType:     subjectType,
-		SubjectName:     subjectName,
-		ChangeType:      changeType,
-		Location:        fmt.Sprintf("baseline.%s[%s]", subjectType, subjectName),
-		Evidence:        fmt.Sprintf("%s %s", subjectType, changeType),
-		Explanation:     explanation,
-		Recommendation:  recommendation,
-		Confidence:      "high",
+		ID:                   id,
+		Title:                title,
+		Severity:             level,
+		Category:             "baseline-drift",
+		OWASPMCPMapping:      "MCP03 Tool Poisoning",
+		ServerID:             serverID,
+		SubjectType:          subjectType,
+		SubjectName:          subjectName,
+		ChangeType:           changeType,
+		PreviousContractHash: reportableHash(previousHash),
+		CurrentContractHash:  reportableHash(currentHash),
+		Location:             fmt.Sprintf("baseline.%s[%s]", subjectType, subjectName),
+		Evidence:             fmt.Sprintf("%s %s", subjectType, changeType),
+		Explanation:          explanation,
+		Recommendation:       recommendation,
+		Confidence:           "high",
 	}
+}
+
+func reportableHash(value string) string {
+	if !isSHA256(value) {
+		return ""
+	}
+	return strings.ToLower(value)
 }

@@ -55,6 +55,15 @@ func TestCreateIsStableAndDoesNotExposeSecrets(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsAmbiguousNormalizedIdentity(t *testing.T) {
+	doc := baselineTestDocument()
+	doc.Prompts[0].Name = "review notes"
+	doc.Prompts = append(doc.Prompts, mcp.PromptDefinition{ServerID: "test", Name: "review  notes"})
+	if _, err := Create(doc, "test", time.Now()); err == nil || !strings.Contains(err.Error(), "subject_identity is duplicated") {
+		t.Fatalf("expected duplicate baseline identity error, got %v", err)
+	}
+}
+
 func TestCompareReportsAddedChangedRemovedAndServerChanges(t *testing.T) {
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	expected, err := Create(baselineTestDocument(), "0.3.0", now)
@@ -81,6 +90,23 @@ func TestCompareReportsAddedChangedRemovedAndServerChanges(t *testing.T) {
 			t.Fatalf("missing %s in %+v", id, findings)
 		}
 	}
+	wantHashes := map[string][2]string{
+		"AG-BASE001": {"", artifactHash(current, "resource", "new-resource")},
+		"AG-BASE002": {artifactHash(expected, "tool", "read_file"), artifactHash(current, "tool", "read_file")},
+		"AG-BASE003": {artifactHash(expected, "prompt", "review"), ""},
+		"AG-BASE004": {expected.Servers[0].ContractHash, current.Servers[0].ContractHash},
+	}
+	for _, finding := range findings {
+		if got := [2]string{finding.PreviousContractHash, finding.CurrentContractHash}; got != wantHashes[finding.ID] {
+			t.Fatalf("%s hashes = %v, want %v", finding.ID, got, wantHashes[finding.ID])
+		}
+		withoutHashes := finding
+		withoutHashes.PreviousContractHash = ""
+		withoutHashes.CurrentContractHash = ""
+		if report.Fingerprint(finding) != report.Fingerprint(withoutHashes) {
+			t.Fatalf("%s hash diagnostics changed the finding fingerprint", finding.ID)
+		}
+	}
 }
 
 func TestCompareReportsServersAddedAndRemovedWithoutArtifacts(t *testing.T) {
@@ -104,10 +130,12 @@ func TestCompareReportsServersAddedAndRemovedWithoutArtifacts(t *testing.T) {
 	added := false
 	removed := false
 	for _, finding := range findings {
-		if finding.ID == "AG-BASE004" && finding.ChangeType == "added" && finding.Severity == severity.High {
+		if finding.ID == "AG-BASE004" && finding.ChangeType == "added" && finding.Severity == severity.High &&
+			finding.PreviousContractHash == "" && finding.CurrentContractHash == current.Servers[0].ContractHash {
 			added = true
 		}
-		if finding.ID == "AG-BASE004" && finding.ChangeType == "removed" {
+		if finding.ID == "AG-BASE004" && finding.ChangeType == "removed" && finding.Severity == severity.Info &&
+			finding.PreviousContractHash == expected.Servers[0].ContractHash && finding.CurrentContractHash == "" {
 			removed = true
 		}
 	}

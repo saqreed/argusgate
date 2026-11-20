@@ -2,6 +2,26 @@
 
 All notable changes to ArgusGate will be documented in this file.
 
+## 0.3.5 - Unreleased
+
+### Added
+
+- Include previous and current SHA-256 contract hashes in JSON baseline drift findings. Baseline files and finding fingerprints retain their existing format. Consumers that validate reports strictly should update their report schema.
+- Add an offline walkthrough for tool allow-list overrides and global deny precedence.
+- Document verified release installation commands for macOS, Linux, and Windows, including ARM64 archive selection.
+
+### Fixed
+
+- Evaluate negation per capability mention in read-only annotation checks. An explicitly negated capability does not hide a separate affirmative claim, and contradictory annotations still produce `AG-MCP002`.
+- Traverse baseline removals in input order so repeated scans keep a stable finding order, including when the finding limit is reached.
+- Reject ambiguous normalized identities before creating or comparing a baseline.
+- Cover Windows-sensitive paths across tools, prompts, resources, and resource templates.
+
+### Security
+
+- Raise the minimum toolchain to Go 1.26.11, which includes standard-library security fixes published after Go 1.26.8.
+- Redact the baseline path in report summaries through the same redaction path as other source paths.
+
 ## 0.3.1 - 2026-10-06
 
 ### Security

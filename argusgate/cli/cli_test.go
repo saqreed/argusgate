@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/saqreed/argusgate/argusgate/scanner"
 )
 
 func TestRunHelpAndVersion(t *testing.T) {
@@ -24,7 +26,7 @@ func TestRunHelpAndVersion(t *testing.T) {
 	if code := Run([]string{"--version"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("version exit code = %d, stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "argusgate version 0.3.1") {
+	if got, want := stdout.String(), "argusgate version "+scanner.Version+"\n"; got != want {
 		t.Fatalf("unexpected version output: %s", stdout.String())
 	}
 }
