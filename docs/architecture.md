@@ -1,6 +1,6 @@
 # Architecture
 
-ArgusGate v0.3.1 is a CLI-first Go application. Local scans are offline; network access exists only behind the explicit `inspect` command or `--url` baseline source.
+ArgusGate is a CLI-first Go application. Local scans stay offline. The explicit `inspect` command and the `--url` baseline source can use the network.
 
 ## Packages
 
@@ -64,6 +64,8 @@ A baseline contains:
 
 Environment/header values are omitted; only key names affect server contracts. Secret-like values elsewhere are redacted before hashing. Added and changed contracts are high severity; removal is informational.
 
+Drift findings include the preceding and current canonical SHA-256 contract hashes in JSON when available. An addition has only a current hash and a removal has only a preceding hash. The hashes supplement the finding without affecting its fingerprint or suppression behavior.
+
 Boolean and numeric contract values are preserved, including integer precision. When upgrading from older canonicalization behavior, existing baselines may report drift even if source metadata is unchanged. Re-review the source and use the explicit baseline update command; never silently migrate reviewed hashes or suppressions.
 
 ## Determinism And Failure
@@ -72,4 +74,4 @@ Map traversal, artifact ordering, finding ordering, fingerprints, rule listing, 
 
 ## Deferred Runtime Gateway
 
-The package boundaries allow future reuse by a runtime gateway, but v0.3.1 does not proxy MCP traffic or enforce tool invocations.
+An eventual runtime gateway could reuse the metadata and policy packages. The current CLI evaluates advertised contracts before use.

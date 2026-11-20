@@ -41,6 +41,14 @@ func TestPublishedSchemasValidateProjectArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	validateJSONValue(t, reportSchema, baselineReport)
+	doc.Tools[0].Description = "Read the reviewed workspace document."
+	driftReport, err := scanner.ScanDocumentWithOptions("fixtures", doc, policy.Default(), scanner.Options{
+		Baseline: &baselineFile, BaselinePath: "argusgate-baseline.json",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateJSONValue(t, reportSchema, driftReport)
 
 	v03Policy, err := policy.LoadFile("examples/policies/v03-trust.yaml")
 	if err != nil {
@@ -56,6 +64,7 @@ func TestPublishedSchemasValidateProjectArtifacts(t *testing.T) {
 		"examples/policies/default.yaml",
 		"examples/policies/v02-suppressions.yaml",
 		"examples/policies/v03-trust.yaml",
+		"examples/policies/tool-precedence.yaml",
 	} {
 		validateYAMLFile(t, policySchema, path)
 	}

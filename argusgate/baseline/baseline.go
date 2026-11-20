@@ -22,13 +22,14 @@ func Create(doc mcp.Document, argusGateVersion string, now time.Time) (File, err
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
+	artifacts := mcp.DocumentArtifacts(doc)
 	out := File{
 		Version:          FormatVersion,
 		ArgusGateVersion: argusGateVersion,
 		CreatedAt:        now.UTC().Format(time.RFC3339),
 		ProtocolVersion:  redact.Text(doc.ProtocolVersion),
 		Servers:          make([]ServerEntry, 0, len(doc.Servers)),
-		Artifacts:        make([]ArtifactEntry, 0, len(mcp.DocumentArtifacts(doc))),
+		Artifacts:        make([]ArtifactEntry, 0, len(artifacts)),
 	}
 	serverIdentities := make(map[string]string, len(doc.Servers))
 	for _, server := range doc.Servers {
@@ -44,7 +45,7 @@ func Create(doc mcp.Document, argusGateVersion string, now time.Time) (File, err
 			ContractHash: contractHash,
 		})
 	}
-	for _, artifact := range mcp.DocumentArtifacts(doc) {
+	for _, artifact := range artifacts {
 		serverIdentity := serverIdentities[artifact.ServerID]
 		if serverIdentity == "" {
 			serverIdentity = identityHash("server", artifact.ServerID)
@@ -61,6 +62,9 @@ func Create(doc mcp.Document, argusGateVersion string, now time.Time) (File, err
 			Name:            redact.Text(artifact.Name),
 			ContractHash:    contractHash,
 		})
+	}
+	if err := Validate(out); err != nil {
+		return File{}, fmt.Errorf("invalid generated baseline: %w", err)
 	}
 	sortFile(&out)
 	return out, nil

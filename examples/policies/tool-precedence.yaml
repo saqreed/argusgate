@@ -1,0 +1,14 @@
+version: "0.3"
+defaults:
+  fail_on: medium
+  allow_unknown_tools: false
+rules:
+  allow_tools:
+    - read_summary
+  deny_tools:
+    - read_history
+servers:
+  status-catalog:
+    allow_tools:
+      - list_status
+      - read_history
